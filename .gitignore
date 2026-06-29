@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.next/
+.expo/
+.turbo/
+.codex-run/
+
+.env
+.env.*
+!.env.example
+
+*.log

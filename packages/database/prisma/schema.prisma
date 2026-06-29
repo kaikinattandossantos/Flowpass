@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id              String   @id @default(uuid())
+  name            String
+  cnpj            String   @unique
+  email           String   @unique
+  logo_url        String?
+  primary_color   String   @default("#0B1F3A")
+  secondary_color String   @default("#00C896")
+  subdomain       String   @unique
+  created_at      DateTime @default(now())
+  users           User[]
+  events          Event[]
+}
+
+model User {
+  id            String   @id @default(uuid())
+  company_id    String
+  company       Company  @relation(fields: [company_id], references: [id])
+  name          String
+  email         String   @unique
+  password_hash String
+  role          Role     @default(viewer)
+  created_at    DateTime @default(now())
+  operators     Operator[]
+}
+
+enum Role {
+  admin
+  viewer
+  operator
+}
+
+model Event {
+  id               String         @id @default(uuid())
+  company_id       String
+  company          Company        @relation(fields: [company_id], references: [id])
+  name             String
+  description      String?
+  start_at         DateTime
+  end_at           DateTime
+  location         String?
+  max_capacity     Int?
+  is_paid          Boolean        @default(false)
+  waitlist_enabled Boolean        @default(false)
+  status           EventStatus    @default(draft)
+  created_at       DateTime       @default(now())
+  categories       Category[]
+  form_fields      FormField[]
+  registrations    Registration[]
+  operators        Operator[]
+}
+
+enum EventStatus {
+  draft
+  active
+  finished
+}
+
+model Category {
+  id            String         @id @default(uuid())
+  event_id      String
+  event         Event          @relation(fields: [event_id], references: [id])
+  name          String
+  max_capacity  Int?
+  color         String?
+  registrations Registration[]
+}
+
+model FormField {
+  id       String    @id @default(uuid())
+  event_id String
+  event    Event     @relation(fields: [event_id], references: [id])
+  label    String
+  type     FieldType
+  required Boolean   @default(false)
+  options  Json?
+  order    Int       @default(0)
+}
+
+enum FieldType {
+  text
+  email
+  phone
+  cpf
+  select
+  multi_select
+  file
+  number
+}
+
+model Registration {
+  id                 String             @id @default(uuid())
+  event_id           String
+  event              Event              @relation(fields: [event_id], references: [id])
+  category_id        String
+  category           Category           @relation(fields: [category_id], references: [id])
+  name               String
+  email              String
+  phone              String?
+  form_data          Json
+  qr_token           String?            @unique
+  qr_token_expires_at DateTime?
+  status             RegistrationStatus @default(pending)
+  created_at         DateTime           @default(now())
+  checkins           CheckIn[]
+}
+
+enum RegistrationStatus {
+  pending
+  confirmed
+  cancelled
+}
+
+model Operator {
+  id            String    @id @default(uuid())
+  event_id      String
+  event         Event     @relation(fields: [event_id], references: [id])
+  user_id       String
+  user          User      @relation(fields: [user_id], references: [id])
+  name          String
+  email         String
+  temp_password String?
+  active        Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  checkins      CheckIn[]
+}
+
+model CheckIn {
+  id              String       @id @default(uuid())
+  registration_id String
+  registration    Registration @relation(fields: [registration_id], references: [id])
+  operator_id     String?
+  operator        Operator?    @relation(fields: [operator_id], references: [id])
+  device_id       String?
+  checked_at      DateTime     @default(now())
+  synced_at       DateTime?
+  is_duplicate    Boolean      @default(false)
+  uuid            String       @unique
+}
