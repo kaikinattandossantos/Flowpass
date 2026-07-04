@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f9fafb;
+  --background: #f4f6f8;
   --foreground: #0b1f3a;
+  --surface: #ffffff;
+  --muted: #5c6b7a;
+  --border: #e2e8f0;
+  --brand: #0b1f3a;
+  --accent: #00c896;
+  --accent-dark: #009b74;
+  --hero-gradient: linear-gradient(135deg, #0b1f3a 0%, #123456 55%, #0d2847 100%);
 }
 
 @theme inline {
@@ -15,12 +22,12 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #64748b;
+  color: #94a3b8;
 }
 
 input,
@@ -35,4 +42,21 @@ select {
 .bg-amber-50,
 .bg-red-50 {
   color: #111827;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-snap {
+  scroll-snap-type: x mandatory;
+}
+
+.carousel-snap > * {
+  scroll-snap-align: start;
 }

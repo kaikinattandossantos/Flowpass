@@ -1,11 +1,14 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { isAxiosError } from 'axios'
 import { useAuthStore } from '@/store/auth'
 import { getHomeForRole } from '@/lib/auth'
 import toast from 'react-hot-toast'
+import { PublicHeader } from '@/components/public/PublicHeader'
+import { PublicFooter } from '@/components/public/PublicFooter'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -32,11 +35,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0B1F3A] to-[#1a3a52] flex items-center justify-center">
+    <div className="min-h-screen flex flex-col bg-[var(--background)]">
+      <PublicHeader />
+      <div className="flex-1 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-lg shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-[#0B1F3A] mb-2">FlowPass</h1>
-          <p className="text-gray-900 mb-8">Acesso para administradores e empresas</p>
+        <div className="bg-white rounded-2xl border border-[var(--border)] shadow-xl p-8">
+          <h1 className="text-3xl font-bold text-[var(--brand)] mb-2">Área do organizador</h1>
+          <p className="text-slate-600 mb-8">Acesso para administradores e empresas parceiras</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -70,12 +75,16 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 space-y-2 text-xs text-gray-800">
-            <p><strong>Admin plataforma:</strong> superadmin@flowpass.com.br / flowpass123</p>
-            <p><strong>Empresa demo:</strong> admin@flowpass.com.br / flowpass123</p>
-          </div>
+          <p className="mt-6 text-center text-sm text-slate-600">
+            É participante?{' '}
+            <Link href="/inscrever" className="font-semibold text-[var(--accent-dark)] hover:underline">
+              Ver eventos abertos
+            </Link>
+          </p>
         </div>
       </div>
+      </div>
+      <PublicFooter />
     </div>
   )
 }

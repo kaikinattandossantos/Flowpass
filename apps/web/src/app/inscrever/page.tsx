@@ -1,191 +1,99 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import axios from 'axios'
-import { formatEventAddress } from '@/lib/address'
-import { getContrastMutedTextColor, getContrastTextColor } from '@/lib/color-contrast'
-
-interface PublicEvent {
-  id: string
-  name: string
-  description?: string | null
-  start_at: string
-  end_at: string
-  banner_color: string
-  accent_color: string
-  welcome_message?: string | null
-  street: string
-  number: string
-  complement?: string | null
-  neighborhood?: string | null
-  city?: string | null
-  state?: string | null
-  cep: string
-  location?: string | null
-  categories: Array<{ id: string; name: string; color?: string | null }>
-  company: { name: string }
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
-
-function formatEventDate(startAt: string, endAt: string) {
-  const start = new Date(startAt)
-  const end = new Date(endAt)
-  const sameDay = start.toDateString() === end.toDateString()
-
-  const dateOptions: Intl.DateTimeFormatOptions = {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric'
-  }
-
-  const timeOptions: Intl.DateTimeFormatOptions = {
-    hour: '2-digit',
-    minute: '2-digit'
-  }
-
-  if (sameDay) {
-    return `${start.toLocaleDateString('pt-BR', dateOptions)} · ${start.toLocaleTimeString('pt-BR', timeOptions)} – ${end.toLocaleTimeString('pt-BR', timeOptions)}`
-  }
-
-  return `${start.toLocaleString('pt-BR', { ...dateOptions, ...timeOptions })} até ${end.toLocaleString('pt-BR', { ...dateOptions, ...timeOptions })}`
-}
+import { useMemo, useState } from 'react'
+import { PublicHeader } from '@/components/public/PublicHeader'
+import { PublicFooter } from '@/components/public/PublicFooter'
+import { EventCard } from '@/components/public/EventCard'
+import { EventCarousel } from '@/components/public/EventCarousel'
+import { CategoryPills } from '@/components/public/CategoryPills'
+import { usePublicEvents } from '@/hooks/usePublicEvents'
+import { filterPublicEvents, groupEventsByCity } from '@/lib/public-events'
 
 export default function InscreverListPage() {
-  const [events, setEvents] = useState<PublicEvent[]>([])
-  const [loading, setLoading] = useState(true)
+  const { events, loading } = usePublicEvents()
   const [search, setSearch] = useState('')
+  const [category, setCategory] = useState('Todos')
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        const response = await axios.get(`${API_URL}/public/events`)
-        setEvents(response.data)
-      } catch {
-        setEvents([])
-      } finally {
-        setLoading(false)
-      }
+  const categories = useMemo(() => {
+    const names = new Set<string>()
+    for (const event of events) {
+      for (const item of event.categories) names.add(item.name)
     }
+    return ['Todos', ...Array.from(names).sort()]
+  }, [events])
 
-    fetchEvents()
-  }, [])
+  const filtered = useMemo(
+    () => filterPublicEvents(events, search, category),
+    [events, search, category]
+  )
 
-  const filteredEvents = events.filter((event) => {
-    const term = search.trim().toLowerCase()
-    if (!term) return true
-
-    return (
-      event.name.toLowerCase().includes(term) ||
-      event.company.name.toLowerCase().includes(term) ||
-      formatEventAddress(event).toLowerCase().includes(term)
-    )
-  })
+  const cities = useMemo(() => groupEventsByCity(filtered), [filtered])
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-[#0B1F3A] text-white px-4 py-10">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-sm uppercase tracking-wider text-white/80">FlowPass</p>
-          <h1 className="text-3xl md:text-4xl font-bold mt-2">Eventos com inscrição aberta</h1>
-          <p className="text-white/90 mt-3 max-w-2xl">
-            Escolha um evento abaixo para se inscrever como participante e receber seu QR Code de entrada.
-          </p>
-        </div>
-      </header>
+    <div className="min-h-screen flex flex-col bg-[var(--background)]">
+      <PublicHeader search={search} onSearchChange={setSearch} showSearch />
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-6">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome, organizador ou local..."
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-[#00C896] outline-none text-gray-900"
-          />
+      <section className="bg-white border-b border-[var(--border)]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
+          <h1 className="text-3xl sm:text-4xl font-bold text-[var(--brand)]">Eventos com inscrição aberta</h1>
+          <p className="text-slate-600 mt-2 max-w-2xl">
+            Escolha um evento, preencha o formulário e receba seu ingresso digital com QR Code.
+          </p>
+          <div className="mt-6 md:hidden">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar eventos..."
+              className="w-full px-4 py-3 rounded-xl border border-[var(--border)] outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            />
+          </div>
+        </div>
+      </section>
+
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-8">
+        <div className="mb-8">
+          <CategoryPills categories={categories} selected={category} onChange={setCategory} />
         </div>
 
         {loading ? (
-          <div className="bg-white rounded-xl shadow p-8 text-center text-gray-900">
-            Carregando eventos...
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="h-80 rounded-2xl bg-white border animate-pulse" />
+            ))}
           </div>
-        ) : filteredEvents.length === 0 ? (
-          <div className="bg-white rounded-xl shadow p-8 text-center text-gray-900">
-            <h2 className="text-xl font-semibold text-[#0B1F3A]">Nenhum evento disponível</h2>
-            <p className="mt-2">
-              {search
-                ? 'Nenhum evento encontrado para sua busca.'
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl border p-12 text-center">
+            <h2 className="text-xl font-bold text-[var(--brand)]">Nenhum evento disponível</h2>
+            <p className="text-slate-600 mt-2">
+              {search || category !== 'Todos'
+                ? 'Nenhum evento encontrado para os filtros selecionados.'
                 : 'No momento não há eventos ativos com inscrições abertas.'}
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredEvents.map((event) => (
-              <article
-                key={event.id}
-                className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition"
-              >
-                <div
-                  className="px-6 py-4"
-                  style={{
-                    backgroundColor: event.banner_color,
-                    color: getContrastTextColor(event.banner_color)
-                  }}
-                >
-                  <p
-                    className="text-xs uppercase tracking-wider"
-                    style={{ color: getContrastMutedTextColor(event.banner_color) }}
-                  >
-                    {event.company.name}
-                  </p>
-                  <h2 className="text-xl font-bold mt-1">{event.name}</h2>
+          <>
+            <EventCarousel
+              title={`${filtered.length} evento(s) encontrado(s)`}
+              subtitle="Deslize para explorar ou use os filtros acima"
+              events={filtered.slice(0, 10)}
+            />
+
+            {cities.map(([city, cityEvents]) => (
+              <section key={city} className="mb-12">
+                <h2 className="text-xl font-bold text-[var(--brand)] mb-5">{city}</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                  {cityEvents.map((event) => (
+                    <EventCard key={event.id} event={event} variant="grid" />
+                  ))}
                 </div>
-
-                <div className="p-6 space-y-4">
-                  <p className="text-gray-900 text-sm">
-                    {event.welcome_message || event.description || 'Inscrições abertas para participantes.'}
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-900">
-                    <p>
-                      <strong>Data:</strong> {formatEventDate(event.start_at, event.end_at)}
-                    </p>
-                    <p>
-                      <strong>Local:</strong> {formatEventAddress(event)}
-                    </p>
-                  </div>
-
-                  {event.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {event.categories.map((category) => (
-                        <span
-                          key={category.id}
-                          className="px-3 py-1 rounded-full text-xs font-medium text-gray-900"
-                          style={{ backgroundColor: `${category.color || '#00C896'}22` }}
-                        >
-                          {category.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <Link
-                    href={`/inscrever/${event.id}`}
-                    className="inline-flex w-full md:w-auto items-center justify-center px-6 py-3 rounded-lg font-semibold transition hover:opacity-90"
-                    style={{
-                      backgroundColor: event.accent_color,
-                      color: getContrastTextColor(event.accent_color)
-                    }}
-                  >
-                    Inscrever-se neste evento
-                  </Link>
-                </div>
-              </article>
+              </section>
             ))}
-          </div>
+          </>
         )}
       </main>
+
+      <PublicFooter />
     </div>
   )
 }
