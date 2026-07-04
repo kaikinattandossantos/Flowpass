@@ -1,0 +1,87 @@
+---
+pid: 13340
+cwd: "C:\Users\kaiki\OneDrive\Documentos\flowpass_mvp_updated\flowpass"
+command: "Get-Content \"C:\\Users\\kaiki\\OneDrive\\Documentos\\flowpass_mvp_updated\\flowpass\\apps\\mobile\\App.native.tsx\" -TotalCount 80"
+started_at: 2026-07-04T03:42:37.399Z
+running_for_ms: 51140009 
+---
+import React, { useState, useEffect } from 'react'
+import { StyleSheet, Text, View, TouchableOpacity, Alert, TextInput, ScrollView } from 'react-native'
+import { CameraView, useCameraPermissions } from 'expo-camera'
+import { Audio } from 'expo-av'
+import { initDatabase, validateCheckin, saveRegistrations, getUnsyncedCheckins, markAsSynced } from './services/database.native'
+import { useAuthStore } from './store/auth.native'
+import axios from 'axios'
+import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LogOut, Camera } from 'lucide-react-native'
+
+const API_URL = 'http://localhost:3333'
+
+type Screen = 'login' | 'select-event' | 'sync' | 'scanner'
+
+export default function App() {
+  const [screen, setScreen] = useState<Screen>('login')
+  const [permission, requestPermission] = useCameraPermissions()
+  const [scanned, setScanned] = useState(false)
+  const [result, setResult] = useState<{ type: 'success' | 'error' | 'wrong_category', message: string, name?: string, correctCategory?: string } | null>(null)
+  const { user, token, login, logout, loadStorage } = useAuthStore()
+  
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [events, setEvents] = useState<any[]>([])
+  const [selectedEvent, setSelectedEvent] = useState<any>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+
+  useEffect(() => {
+    initDatabase()
+    loadStorage().then(() => {
+      if (token) setScreen('select-event')
+    })
+  }, [token])
+
+  const playSound = async (type: 'success' | 'error') => {
+    try {
+      // In a real environment, these would be local assets
+      // require('./assets/sounds/success.mp3')
+      // For this MVP, we'll assume the logic is here
+      console.log(`Playing ${type} sound`)
+    } catch (e) {
+      console.log('Error playing sound', e)
+    }
+  }
+
+  const handleLogin = async () => {
+    try {
+      await login(email, password)
+      // Redirect handled by useEffect
+    } catch (e) {
+      Alert.alert('Erro', 'Credenciais invǭlidas')
+    }
+  }
+
+  const fetchEvents = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/events`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setEvents(response.data.filter((e: any) => e.status === 'active'))
+    } catch (e) {
+      Alert.alert('Erro', 'Falha ao carregar eventos')
+    }
+  }
+
+  useEffect(() => {
+    if (screen === 'select-event') fetchEvents()
+  }, [screen])
+
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    if (scanned || !user) return
+    setScanned(true)
+
+    try {
+      const res = await validateCheckin(data, user.id)
+      if (res.success) {
+        playSound('success')
+        setResult({ type: 'success', message: 'Entrada Liberada!', name: res.name })
+      } else if (res.type === 'wrong_category') {
+        playSound('error')

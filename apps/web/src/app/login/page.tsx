@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { isAxiosError } from 'axios'
 import { useAuthStore } from '@/store/auth'
 import toast from 'react-hot-toast'
 
@@ -17,8 +18,14 @@ export default function LoginPage() {
       await login(email, password)
       toast.success('Login realizado com sucesso!')
       router.push('/dashboard')
-    } catch {
-      toast.error('Falha ao fazer login')
+    } catch (error: unknown) {
+      if (isAxiosError(error) && error.response?.status === 401) {
+        toast.error('E-mail ou senha incorretos. Se ainda não criou conta, cadastre-se primeiro.')
+      } else if (isAxiosError(error) && !error.response) {
+        toast.error('Não foi possível conectar à API. Verifique se o servidor está rodando (pnpm dev).')
+      } else {
+        toast.error('Falha ao fazer login')
+      }
     }
   }
 
@@ -67,6 +74,10 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-gray-600 mt-6">
             Não tem conta? <a href="/register" className="text-[#00C896] hover:underline">Cadastre-se</a>
+          </p>
+
+          <p className="text-center text-xs text-gray-500 mt-4">
+            Conta demo: <span className="font-mono">admin@flowpass.com.br</span> / <span className="font-mono">flowpass123</span>
           </p>
         </div>
       </div>

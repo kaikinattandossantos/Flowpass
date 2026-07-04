@@ -2,15 +2,27 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import axios from 'axios'
-import { isAxiosError } from 'axios'
+import axios, { isAxiosError } from 'axios'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '@/store/auth'
+import type { User } from '@/store/auth'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
 
+function getApiErrorMessage(error: unknown, fallback: string) {
+  if (!isAxiosError(error)) return fallback
+
+  const data = error.response?.data
+  if (typeof data?.message === 'string') return data.message
+
+  return fallback
+}
+
 export default function RegisterPage() {
   const router = useRouter()
+
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [form, setForm] = useState({
     company_name: '',
     cnpj: '',
@@ -22,34 +34,62 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+    setErrorMessage(null)
+
+    if (form.password.length < 6) {
+      const message = 'A senha deve ter pelo menos 6 caracteres.'
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
     if (form.password !== form.confirmPassword) {
-      toast.error('As senhas não coincidem')
+      const message = 'As senhas não coincidem.'
+      setErrorMessage(message)
+      toast.error(message)
+      return
+    }
+
+    const normalizedCnpj = form.cnpj.replace(/\D/g, '')
+    if (normalizedCnpj.length !== 14) {
+      const message = 'CNPJ inválido. Informe os 14 dígitos.'
+      setErrorMessage(message)
+      toast.error(message)
       return
     }
 
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/companies`, {
-        company_name: form.company_name,
-        cnpj: form.cnpj,
-        admin_name: form.admin_name,
-        email: form.email,
+      const response = await axios.post<{ token: string; user: User }>(`${API_URL}/companies`, {
+        company_name: form.company_name.trim(),
+        cnpj: normalizedCnpj,
+        admin_name: form.admin_name.trim(),
+        email: form.email.trim().toLowerCase(),
         password: form.password
       })
 
-      const { token } = response.data
+      const { token, user } = response.data
       localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
-      
+      localStorage.setItem('user', JSON.stringify(user))
+      useAuthStore.setState({ token, user, loading: false })
+
       toast.success('Empresa criada com sucesso!')
       router.push('/dashboard')
     } catch (error: unknown) {
-      if (isAxiosError(error) && error.response?.status === 409) {
-        toast.error('E-mail ou CNPJ já cadastrado')
-      } else {
-        toast.error('Erro ao criar empresa')
+      let message = 'Erro ao criar empresa'
+
+      if (isAxiosError(error)) {
+        if (!error.response) {
+          message = 'Não foi possível conectar à API. Verifique se o servidor está rodando (pnpm dev).'
+        } else if (error.response.status === 409) {
+          message = getApiErrorMessage(error, 'E-mail ou CNPJ já cadastrado')
+        } else {
+          message = getApiErrorMessage(error, 'Erro ao criar empresa')
+        }
       }
+
+      setErrorMessage(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -129,6 +169,12 @@ export default function RegisterPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] focus:border-transparent outline-none"
               />
             </div>
+
+            {errorMessage && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {errorMessage}
+              </div>
+            )}
 
             <button
               type="submit"

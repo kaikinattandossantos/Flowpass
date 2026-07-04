@@ -19,26 +19,49 @@ export async function companyRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { company_name, cnpj, admin_name, email, password } = request.body
 
-    const existing = await prisma.company.findFirst({
-      where: { OR: [{ cnpj }, { email }] }
-    })
-
-    if (existing) {
-      return reply.status(409).send({ message: 'E-mail ou CNPJ já cadastrado' })
+    const normalizedCnpj = cnpj.replace(/\D/g, '')
+    if (normalizedCnpj.length !== 14) {
+      return reply.status(400).send({ message: 'CNPJ inválido. Informe os 14 dígitos.' })
     }
 
     const subdomain = company_name
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\s+/g, '')
+      .replace(/[^a-z0-9]/g, '')
+
+    if (!subdomain) {
+      return reply.status(400).send({ message: 'Nome da empresa inválido' })
+    }
+
+    const [existingCompany, existingUser, existingSubdomain] = await Promise.all([
+      prisma.company.findFirst({
+        where: {
+          OR: [
+            { cnpj: normalizedCnpj },
+            { cnpj },
+            { email }
+          ]
+        }
+      }),
+      prisma.user.findUnique({ where: { email } }),
+      prisma.company.findUnique({ where: { subdomain } })
+    ])
+
+    if (existingCompany || existingUser) {
+      return reply.status(409).send({ message: 'E-mail ou CNPJ já cadastrado' })
+    }
+
+    if (existingSubdomain) {
+      return reply.status(409).send({ message: 'Já existe uma empresa com nome semelhante. Tente outro nome.' })
+    }
 
     const password_hash = await bcrypt.hash(password, 10)
 
     const company = await prisma.company.create({
       data: {
         name: company_name,
-        cnpj,
+        cnpj: normalizedCnpj,
         email,
         subdomain,
         users: {
