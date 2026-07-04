@@ -260,8 +260,23 @@ export async function registrationRoutes(app: FastifyInstance) {
       include: { category: true }
     })
 
-    if (!registration || registration.event_id !== event_id) {
-      return reply.status(404).send({ message: 'QR Code inválido para este evento.' })
+    if (!registration) {
+      return reply.status(404).send({ message: 'QR Code não encontrado. Verifique o código ou link do ingresso.' })
+    }
+
+    if (registration.event_id !== event_id) {
+      const correctEvent = await prisma.event.findUnique({
+        where: { id: registration.event_id },
+        select: { id: true, name: true }
+      })
+
+      return reply.status(400).send({
+        message: correctEvent
+          ? `Este QR Code pertence ao evento "${correctEvent.name}". Abra o credenciamento desse evento.`
+          : 'QR Code inválido para este evento.',
+        correct_event_id: correctEvent?.id ?? null,
+        correct_event_name: correctEvent?.name ?? null
+      })
     }
 
     if (registration.status !== 'confirmed') {
@@ -367,8 +382,23 @@ export async function registrationRoutes(app: FastifyInstance) {
       }
     })
 
-    if (!registration || registration.event_id !== event_id) {
-      return reply.status(404).send({ message: 'QR Code inválido para este evento.' })
+    if (!registration) {
+      return reply.status(404).send({ message: 'QR Code não encontrado. Verifique o código ou link do ingresso.' })
+    }
+
+    if (registration.event_id !== event_id) {
+      const correctEvent = await prisma.event.findUnique({
+        where: { id: registration.event_id },
+        select: { id: true, name: true }
+      })
+
+      return reply.status(400).send({
+        message: correctEvent
+          ? `Este QR Code pertence ao evento "${correctEvent.name}". Abra o credenciamento desse evento.`
+          : 'QR Code inválido para este evento.',
+        correct_event_id: correctEvent?.id ?? null,
+        correct_event_name: correctEvent?.name ?? null
+      })
     }
 
     const maskEmail = (email: string) => {
@@ -383,6 +413,7 @@ export async function registrationRoutes(app: FastifyInstance) {
       name: registration.name,
       masked_email: maskEmail(registration.email),
       category: registration.category.name,
+      qr_token: qrToken,
       already_checked_in: registration.checkins.length > 0,
       checked_at: registration.checkins[0]?.checked_at ?? null
     }

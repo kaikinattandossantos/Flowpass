@@ -28,6 +28,7 @@ export default function TicketPage() {
   const token = params.token as string
   const [ticket, setTicket] = useState<TicketData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [ticketUrl, setTicketUrl] = useState<string>()
 
   useEffect(() => {
     const fetchTicket = async () => {
@@ -42,6 +43,7 @@ export default function TicketPage() {
     }
 
     fetchTicket()
+    setTicketUrl(`${window.location.origin}/ingresso/${token}`)
   }, [token])
 
   if (loading) {
@@ -69,6 +71,8 @@ export default function TicketPage() {
         startAt={ticket.event.start_at}
         address={{ location: ticket.event.location }}
         qrCodeUrl={ticket.qr_code_url}
+        qrToken={ticket.qr_token}
+        ticketUrl={ticketUrl}
         accentColor={ticket.event.accent_color}
       />
     </div>

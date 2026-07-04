@@ -1,5 +1,6 @@
 'use client'
 
+import toast from 'react-hot-toast'
 import { formatEventAddress } from '@/lib/address'
 import { getContrastMutedTextColor, getContrastTextColor } from '@/lib/color-contrast'
 
@@ -20,6 +21,7 @@ interface TicketCardProps {
     location?: string | null
   }
   qrCodeUrl: string
+  qrToken?: string
   ticketUrl?: string
   accentColor?: string
 }
@@ -32,11 +34,21 @@ export function TicketCard({
   startAt,
   address,
   qrCodeUrl,
+  qrToken,
   ticketUrl,
   accentColor = '#00C896'
 }: TicketCardProps) {
   const headerTextColor = getContrastTextColor(accentColor)
   const headerMutedColor = getContrastMutedTextColor(accentColor)
+
+  const copyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(`${label} copiado!`)
+    } catch {
+      toast.error('Não foi possível copiar')
+    }
+  }
 
   return (
     <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -92,10 +104,34 @@ export function TicketCard({
           Guarde este código ou acesse o link do ingresso novamente quando precisar.
         </p>
 
-        {ticketUrl && (
-          <p className="text-xs text-gray-900 mt-3 break-all">
-            Link do ingresso: {ticketUrl}
-          </p>
+        {(ticketUrl || qrToken) && (
+          <div className="mt-4 text-left bg-gray-50 rounded-xl p-4 space-y-3 text-sm text-gray-900">
+            <p className="font-medium">Para credenciamento manual, use um destes:</p>
+            {ticketUrl && (
+              <div>
+                <p className="text-xs text-gray-900 break-all">Link: {ticketUrl}</p>
+                <button
+                  type="button"
+                  onClick={() => copyText('Link do ingresso', ticketUrl)}
+                  className="mt-2 text-[#00C896] hover:underline text-sm font-medium"
+                >
+                  Copiar link do ingresso
+                </button>
+              </div>
+            )}
+            {qrToken && (
+              <div>
+                <p className="text-xs text-gray-900 break-all">Código: {qrToken}</p>
+                <button
+                  type="button"
+                  onClick={() => copyText('Código do QR', qrToken)}
+                  className="mt-2 text-[#00C896] hover:underline text-sm font-medium"
+                >
+                  Copiar código do QR
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

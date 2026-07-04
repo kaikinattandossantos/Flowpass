@@ -73,11 +73,45 @@ const publicEventSelect = {
   }
 } as const
 
+const publicEventListSelect = {
+  id: true,
+  name: true,
+  description: true,
+  start_at: true,
+  end_at: true,
+  location: true,
+  cep: true,
+  street: true,
+  number: true,
+  complement: true,
+  neighborhood: true,
+  city: true,
+  state: true,
+  banner_color: true,
+  accent_color: true,
+  welcome_message: true,
+  categories: { select: { id: true, name: true, color: true } },
+  company: { select: { name: true } }
+} as const
+
 export async function eventRoutes(app: FastifyInstance) {
   const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
     const companyId = await requireCompanyUser(request, reply)
     if (typeof companyId !== 'string') return
   }
+
+  app.withTypeProvider<ZodTypeProvider>().get('/public/events', async () => {
+    const now = new Date()
+
+    return prisma.event.findMany({
+      where: {
+        status: 'active',
+        end_at: { gte: now }
+      },
+      orderBy: { start_at: 'asc' },
+      select: publicEventListSelect
+    })
+  })
 
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id/public', {
     schema: {

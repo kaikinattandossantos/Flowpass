@@ -5,12 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { QrScanner } from '@/components/checkin/QrScanner'
+import { describeQrInput, parseQrToken } from '@/lib/checkin'
 
 interface ParticipantPreview {
   id: string
   name: string
   masked_email: string
   category: string
+  qr_token?: string
   already_checked_in: boolean
   checked_at: string | null
 }
@@ -26,7 +28,23 @@ interface CheckinResult {
   }
 }
 
+interface ApiErrorData {
+  message?: string
+  correct_event_id?: string | null
+  correct_event_name?: string | null
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
+
+function getApiError(err: unknown, fallback: string): ApiErrorData {
+  if (!axios.isAxiosError(err)) return { message: fallback }
+  const data = err.response?.data as ApiErrorData | undefined
+  return {
+    message: data?.message || fallback,
+    correct_event_id: data?.correct_event_id,
+    correct_event_name: data?.correct_event_name
+  }
+}
 
 export default function CredenciamentoPage() {
   const params = useParams()
@@ -35,6 +53,7 @@ export default function CredenciamentoPage() {
 
   const [eventName, setEventName] = useState('')
   const [loadingEvent, setLoadingEvent] = useState(true)
+  const [qrInput, setQrInput] = useState('')
   const [qrToken, setQrToken] = useState('')
   const [email, setEmail] = useState('')
   const [preview, setPreview] = useState<ParticipantPreview | null>(null)
@@ -43,6 +62,7 @@ export default function CredenciamentoPage() {
   const [lastCheckin, setLastCheckin] = useState<CheckinResult | null>(null)
   const [scannerActive, setScannerActive] = useState(true)
   const [manualMode, setManualMode] = useState(false)
+  const [wrongEvent, setWrongEvent] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -62,32 +82,59 @@ export default function CredenciamentoPage() {
     fetchEvent()
   }, [eventId, router])
 
-  const loadPreview = useCallback(async (token: string) => {
-    if (!token.trim()) return
+  const loadPreview = useCallback(async (rawValue: string) => {
+    const validationError = describeQrInput(rawValue)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+
+    const parsedToken = parseQrToken(rawValue)
+    if (!parsedToken) {
+      toast.error('Código do QR inválido.')
+      return
+    }
 
     setPreviewLoading(true)
     setLastCheckin(null)
+    setWrongEvent(null)
+
     try {
       const authToken = localStorage.getItem('token')
+      if (!authToken) {
+        toast.error('Sessão expirada. Faça login novamente.')
+        router.push('/login')
+        return
+      }
+
       const res = await axios.get(`${API_URL}/events/${eventId}/checkin/preview`, {
-        params: { qr_token: token.trim() },
+        params: { qr_token: parsedToken },
         headers: { Authorization: `Bearer ${authToken}` }
       })
+
       setPreview(res.data)
-      setQrToken(token.trim())
+      setQrToken(res.data.qr_token || parsedToken)
       setScannerActive(false)
       toast.success('QR Code lido com sucesso!')
     } catch (err: unknown) {
       setPreview(null)
-      if (axios.isAxiosError(err)) {
-        toast.error(err.response?.data?.message || 'QR Code inválido')
-      } else {
-        toast.error('QR Code inválido')
+      const apiError = getApiError(err, 'QR Code inválido')
+
+      if (apiError.correct_event_id && apiError.correct_event_name) {
+        setWrongEvent({ id: apiError.correct_event_id, name: apiError.correct_event_name })
       }
+
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        toast.error('Sessão expirada. Faça login novamente.')
+        router.push('/login')
+        return
+      }
+
+      toast.error(apiError.message || 'QR Code inválido')
     } finally {
       setPreviewLoading(false)
     }
-  }, [eventId])
+  }, [eventId, router])
 
   const handleScan = useCallback((decodedText: string) => {
     loadPreview(decodedText)
@@ -100,6 +147,12 @@ export default function CredenciamentoPage() {
     setSubmitting(true)
     try {
       const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error('Sessão expirada. Faça login novamente.')
+        router.push('/login')
+        return
+      }
+
       const res = await axios.post(
         `${API_URL}/events/${eventId}/checkin`,
         { qr_token: qrToken.trim(), email: email.trim() },
@@ -109,16 +162,22 @@ export default function CredenciamentoPage() {
       setPreview(null)
       setEmail('')
       setQrToken('')
+      setQrInput('')
       toast.success('Presença confirmada!')
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        const message = err.response?.data?.message || 'Erro ao confirmar presença'
-        toast.error(message)
-        if (err.response?.status === 409) {
-          setPreview((prev) => prev ? { ...prev, already_checked_in: true, checked_at: err.response?.data?.checked_at } : prev)
-        }
-      } else {
-        toast.error('Erro ao confirmar presença')
+      const apiError = getApiError(err, 'Erro ao confirmar presença')
+      toast.error(apiError.message || 'Erro ao confirmar presença')
+
+      if (apiError.correct_event_id && apiError.correct_event_name) {
+        setWrongEvent({ id: apiError.correct_event_id, name: apiError.correct_event_name })
+      }
+
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        setPreview((prev) => prev ? {
+          ...prev,
+          already_checked_in: true,
+          checked_at: (err.response?.data as { checked_at?: string })?.checked_at ?? prev.checked_at
+        } : prev)
       }
     } finally {
       setSubmitting(false)
@@ -129,6 +188,8 @@ export default function CredenciamentoPage() {
     setPreview(null)
     setEmail('')
     setQrToken('')
+    setQrInput('')
+    setWrongEvent(null)
     setLastCheckin(null)
     setScannerActive(true)
   }
@@ -158,6 +219,32 @@ export default function CredenciamentoPage() {
             Ver ao vivo
           </button>
         </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-sm text-gray-900">
+          <p className="font-semibold mb-1">Como usar o QR Code corretamente</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Escaneie o QR exibido no ingresso do participante</li>
+            <li>Ou cole o <strong>link do ingresso</strong> (ex: /ingresso/...)</li>
+            <li>Ou cole o <strong>código de 64 caracteres</strong> abaixo do QR</li>
+            <li>Abra o credenciamento do <strong>mesmo evento</strong> da inscrição</li>
+            <li>Confirme com o <strong>e-mail exato</strong> usado na inscrição</li>
+          </ul>
+        </div>
+
+        {wrongEvent && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-gray-900">
+            <p className="font-semibold">QR Code de outro evento</p>
+            <p className="text-sm mt-1">
+              Este ingresso pertence ao evento <strong>{wrongEvent.name}</strong>.
+            </p>
+            <button
+              onClick={() => router.push(`/dashboard/events/${wrongEvent.id}/credenciamento`)}
+              className="mt-3 px-4 py-2 bg-[#0B1F3A] text-white rounded-lg hover:bg-[#163456] text-sm"
+            >
+              Abrir credenciamento de {wrongEvent.name}
+            </button>
+          </div>
+        )}
 
         {lastCheckin && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
@@ -209,25 +296,25 @@ export default function CredenciamentoPage() {
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
-                  loadPreview(qrToken)
+                  loadPreview(qrInput)
                 }}
                 className="space-y-4"
               >
                 <div>
                   <label className="block text-sm font-medium text-gray-900 mb-1">
-                    Código do QR (token)
+                    Link do ingresso ou código do QR
                   </label>
                   <input
                     type="text"
-                    value={qrToken}
-                    onChange={(e) => setQrToken(e.target.value)}
-                    placeholder="Cole o código lido do QR"
+                    value={qrInput}
+                    onChange={(e) => setQrInput(e.target.value)}
+                    placeholder="http://localhost:3000/ingresso/... ou código de 64 caracteres"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={previewLoading || !qrToken.trim()}
+                  disabled={previewLoading || !qrInput.trim()}
                   className="w-full py-3 bg-[#0B1F3A] text-white rounded-lg hover:bg-[#163456] disabled:opacity-50"
                 >
                   {previewLoading ? 'Buscando...' : 'Buscar participante'}
@@ -279,12 +366,12 @@ export default function CredenciamentoPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Digite o e-mail completo para validar"
+                    placeholder="Digite o e-mail completo usado na inscrição"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
                     autoFocus
                   />
                   <p className="text-xs text-gray-900 mt-2">
-                    O e-mail deve ser idêntico ao da inscrição para dar baixa no sistema.
+                    Deve ser idêntico ao da inscrição (ex: {preview.masked_email}).
                   </p>
                 </div>
 

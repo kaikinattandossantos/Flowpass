@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import Link from 'next/link'
 import axios, { isAxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import { formatEventAddress } from '@/lib/address'
@@ -119,6 +120,9 @@ export default function PublicRegistrationPage() {
         <div>
           <h1 className="text-2xl font-bold text-[#0B1F3A]">Evento indisponível</h1>
           <p className="text-gray-900 mt-2">Este link não está ativo ou o evento não existe.</p>
+          <Link href="/inscrever" className="inline-block mt-4 text-[#00C896] hover:underline">
+            Ver todos os eventos disponíveis
+          </Link>
         </div>
       </div>
     )
@@ -140,6 +144,7 @@ export default function PublicRegistrationPage() {
           startAt={ticket.event.start_at}
           address={event}
           qrCodeUrl={ticket.qr_code_url}
+          qrToken={ticket.qr_token}
           ticketUrl={ticketUrl}
           accentColor={ticket.event.accent_color}
         />
@@ -149,6 +154,11 @@ export default function PublicRegistrationPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="max-w-2xl mx-auto mb-4">
+        <Link href="/inscrever" className="text-sm text-[#00C896] hover:underline">
+          ← Ver todos os eventos
+        </Link>
+      </div>
       <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
         <div
           className="p-8"
