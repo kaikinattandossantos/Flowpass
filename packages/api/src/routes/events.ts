@@ -1,12 +1,14 @@
-import { FastifyInstance, FastifyRequest } from 'fastify'
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { prisma } from '../../../database'
 import bcrypt from 'bcryptjs'
+import { getJwtUser, requireCompanyUser } from '../utils/auth'
 
 export async function eventRoutes(app: FastifyInstance) {
-  const requireAuth = async (request: FastifyRequest) => {
-    await request.jwtVerify()
+  const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
+    const companyId = await requireCompanyUser(request, reply)
+    if (typeof companyId !== 'string') return
   }
 
   // Public event details for registration form
@@ -47,7 +49,7 @@ export async function eventRoutes(app: FastifyInstance) {
       })
     }
   }, async (request) => {
-    const { company_id } = request.user as { company_id: string }
+    const { company_id } = getJwtUser(request)
     const data = request.body
 
     const event = await prisma.event.create({
@@ -66,7 +68,7 @@ export async function eventRoutes(app: FastifyInstance) {
   app.withTypeProvider<ZodTypeProvider>().get('/events', {
     preHandler: [requireAuth]
   }, async (request) => {
-    const { company_id } = request.user as { company_id: string }
+    const { company_id } = getJwtUser(request)
     return await prisma.event.findMany({
       where: { company_id },
       orderBy: { created_at: 'desc' }
@@ -80,7 +82,7 @@ export async function eventRoutes(app: FastifyInstance) {
     }
   }, async (request, reply) => {
     const { id } = request.params
-    const { company_id } = request.user as { company_id: string }
+    const { company_id } = getJwtUser(request)
 
     const event = await prisma.event.findFirst({
       where: { id, company_id },
@@ -130,7 +132,7 @@ export async function eventRoutes(app: FastifyInstance) {
     }
   }, async (request) => {
     const { id: event_id } = request.params
-    const { company_id } = request.user as { company_id: string }
+    const { company_id } = getJwtUser(request)
     const { name, email } = request.body
 
     const temp_password = Math.random().toString(36).substring(2, 10)

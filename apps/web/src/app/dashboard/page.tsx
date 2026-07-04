@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { getHomeForRole, getStoredUser } from '@/lib/auth'
 
 interface Event {
   id: string
@@ -24,8 +25,15 @@ export default function DashboardPage() {
     const fetchEvents = async () => {
       try {
         const token = localStorage.getItem('token')
-        if (!token) {
+        const user = getStoredUser()
+
+        if (!token || !user) {
           router.push('/login')
+          return
+        }
+
+        if (user.role === 'superadmin') {
+          router.push(getHomeForRole(user.role))
           return
         }
 

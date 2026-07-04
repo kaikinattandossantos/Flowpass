@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { isAxiosError } from 'axios'
 import { useAuthStore } from '@/store/auth'
+import { getHomeForRole } from '@/lib/auth'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
@@ -16,11 +17,12 @@ export default function LoginPage() {
     e.preventDefault()
     try {
       await login(email, password)
+      const loggedUser = useAuthStore.getState().user
       toast.success('Login realizado com sucesso!')
-      router.push('/dashboard')
+      router.push(getHomeForRole(loggedUser?.role ?? 'admin'))
     } catch (error: unknown) {
       if (isAxiosError(error) && error.response?.status === 401) {
-        toast.error('E-mail ou senha incorretos. Se ainda não criou conta, cadastre-se primeiro.')
+        toast.error('E-mail ou senha incorretos.')
       } else if (isAxiosError(error) && !error.response) {
         toast.error('Não foi possível conectar à API. Verifique se o servidor está rodando (pnpm dev).')
       } else {
@@ -34,13 +36,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-lg shadow-xl p-8">
           <h1 className="text-3xl font-bold text-[#0B1F3A] mb-2">FlowPass</h1>
-          <p className="text-gray-600 mb-8">Sistema de Credenciamento para Eventos</p>
+          <p className="text-gray-600 mb-8">Acesso para administradores e empresas</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                E-mail
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
               <input
                 type="email"
                 value={email}
@@ -51,9 +51,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Senha
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
               <input
                 type="password"
                 value={password}
@@ -72,13 +70,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-600 mt-6">
-            Não tem conta? <a href="/register" className="text-[#00C896] hover:underline">Cadastre-se</a>
-          </p>
-
-          <p className="text-center text-xs text-gray-500 mt-4">
-            Conta demo: <span className="font-mono">admin@flowpass.com.br</span> / <span className="font-mono">flowpass123</span>
-          </p>
+          <div className="mt-6 space-y-2 text-xs text-gray-500">
+            <p><strong>Admin plataforma:</strong> superadmin@flowpass.com.br / flowpass123</p>
+            <p><strong>Empresa demo:</strong> admin@flowpass.com.br / flowpass123</p>
+          </div>
         </div>
       </div>
     </div>

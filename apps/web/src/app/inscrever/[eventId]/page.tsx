@@ -83,7 +83,10 @@ export default function PublicRegistrationPage() {
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
           </div>
           <h1 className="text-2xl font-bold text-[#0B1F3A] mb-2">Inscrição Confirmada!</h1>
-          <p className="text-gray-600">Verifique seu e-mail e WhatsApp para receber o QR code de acesso.</p>
+          <p className="text-gray-600">
+            Enviamos um e-mail de confirmação com seu QR Code único para entrada no evento.
+            {baseInfo.phone ? ' Também enviamos pelo WhatsApp, se informado.' : ''}
+          </p>
         </div>
       </div>
     )

@@ -9,9 +9,34 @@ export default function Home() {
           Credenciamento inteligente para eventos.
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-slate-300">
-          Gerencie inscrições, gere QR Codes, acompanhe entradas em tempo real e
-          ofereça uma experiência fluida para organizadores e participantes.
+          Três papéis, um fluxo completo: o administrador cadastra empresas,
+          a empresa cria eventos e os participantes se inscrevem, recebem
+          confirmação por e-mail e um QR Code único para entrada.
         </p>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">1. Admin</p>
+            <h2 className="mt-2 text-lg font-semibold">Cadastra empresas</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Cria a conta da organização e do gestor responsável pelos eventos.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">2. Empresa</p>
+            <h2 className="mt-2 text-lg font-semibold">Cria eventos</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Configura categorias, compartilha o link público e acompanha entradas.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">3. Participante</p>
+            <h2 className="mt-2 text-lg font-semibold">Se inscreve no evento</h2>
+            <p className="mt-2 text-sm text-slate-300">
+              Preenche o formulário, recebe e-mail de confirmação e QR Code único.
+            </p>
+          </div>
+        </div>
 
         <div className="mt-10 flex flex-col gap-4 sm:flex-row">
           <a
@@ -19,12 +44,6 @@ export default function Home() {
             className="rounded-full bg-cyan-400 px-6 py-3 text-center font-medium text-slate-950 transition hover:bg-cyan-300"
           >
             Entrar no painel
-          </a>
-          <a
-            href="/register"
-            className="rounded-full border border-white/20 px-6 py-3 text-center font-medium text-white transition hover:bg-white/10"
-          >
-            Criar conta
           </a>
         </div>
       </div>

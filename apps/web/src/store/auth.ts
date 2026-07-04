@@ -5,7 +5,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'admin' | 'viewer' | 'operator'
+  role: 'superadmin' | 'admin' | 'viewer' | 'operator'
 }
 
 interface AuthStore {

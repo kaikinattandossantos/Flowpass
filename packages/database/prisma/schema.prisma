@@ -23,8 +23,8 @@ model Company {
 
 model User {
   id            String   @id @default(uuid())
-  company_id    String
-  company       Company  @relation(fields: [company_id], references: [id])
+  company_id    String?
+  company       Company? @relation(fields: [company_id], references: [id])
   name          String
   email         String   @unique
   password_hash String
@@ -34,6 +34,7 @@ model User {
 }
 
 enum Role {
+  superadmin
   admin
   viewer
   operator
