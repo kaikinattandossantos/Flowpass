@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import axios, { isAxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import { formatEventAddress, normalizeCep } from '@/lib/address'
+import { getContrastMutedTextColor, getContrastTextColor } from '@/lib/color-contrast'
 import type { FormFieldDraft } from '@/lib/form-fields'
 import { FormFieldBuilder } from '@/components/participant/ParticipantFormFields'
 
@@ -467,18 +468,32 @@ export default function NewEventPage() {
               </div>
 
               <div
-                className="rounded-xl p-6 text-white"
-                style={{ backgroundColor: customization.banner_color }}
+                className="rounded-xl p-6"
+                style={{
+                  backgroundColor: customization.banner_color,
+                  color: getContrastTextColor(customization.banner_color)
+                }}
               >
-                <p className="text-sm opacity-80">Prévia da página de inscrição</p>
+                <p
+                  className="text-sm"
+                  style={{ color: getContrastMutedTextColor(customization.banner_color) }}
+                >
+                  Prévia da página de inscrição
+                </p>
                 <h3 className="text-2xl font-bold mt-2">{general.name || 'Nome do evento'}</h3>
-                <p className="mt-2 opacity-90">
+                <p
+                  className="mt-2"
+                  style={{ color: getContrastMutedTextColor(customization.banner_color) }}
+                >
                   {customization.welcome_message || general.description || 'Mensagem de boas-vindas do evento'}
                 </p>
                 <button
                   type="button"
-                  className="mt-4 px-4 py-2 rounded-lg font-semibold text-white"
-                  style={{ backgroundColor: customization.accent_color }}
+                  className="mt-4 px-4 py-2 rounded-lg font-semibold"
+                  style={{
+                    backgroundColor: customization.accent_color,
+                    color: getContrastTextColor(customization.accent_color)
+                  }}
                 >
                   Confirmar Inscrição
                 </button>
@@ -494,7 +509,7 @@ export default function NewEventPage() {
           )}
 
           {errorMessage && (
-            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-gray-900">
               {errorMessage}
             </div>
           )}
@@ -504,7 +519,7 @@ export default function NewEventPage() {
               type="button"
               onClick={() => setStep(Math.max(1, step - 1))}
               disabled={step === 1}
-              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-gray-900"
             >
               Anterior
             </button>
@@ -523,7 +538,7 @@ export default function NewEventPage() {
                   type="button"
                   onClick={() => handleCreateEvent('draft')}
                   disabled={loading}
-                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-gray-900"
                 >
                   Salvar Rascunho
                 </button>

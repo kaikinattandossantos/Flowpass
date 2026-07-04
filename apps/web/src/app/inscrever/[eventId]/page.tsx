@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import axios, { isAxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import { formatEventAddress } from '@/lib/address'
+import { getContrastMutedTextColor, getContrastTextColor } from '@/lib/color-contrast'
 import { ParticipantFormFields, type PublicFormField } from '@/components/participant/ParticipantFormFields'
 import { TicketCard } from '@/components/participant/TicketCard'
 
@@ -149,13 +150,27 @@ export default function PublicRegistrationPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
-        <div className="p-8 text-white" style={{ backgroundColor: event.banner_color }}>
-          <p className="text-sm uppercase tracking-wider text-white/90">Inscrição do participante</p>
+        <div
+          className="p-8"
+          style={{
+            backgroundColor: event.banner_color,
+            color: getContrastTextColor(event.banner_color)
+          }}
+        >
+          <p
+            className="text-sm uppercase tracking-wider"
+            style={{ color: getContrastMutedTextColor(event.banner_color) }}
+          >
+            Inscrição do participante
+          </p>
           <h1 className="text-3xl font-bold mt-2 mb-2">{event.name}</h1>
-          <p className="text-white/90">
+          <p style={{ color: getContrastMutedTextColor(event.banner_color) }}>
             {event.welcome_message || event.description || 'Preencha o formulário para garantir sua entrada.'}
           </p>
-          <div className="mt-4 flex flex-wrap gap-4 text-sm text-white/90">
+          <div
+            className="mt-4 flex flex-wrap gap-4 text-sm"
+            style={{ color: getContrastMutedTextColor(event.banner_color) }}
+          >
             <span>
               {new Date(event.start_at).toLocaleDateString('pt-BR', {
                 day: '2-digit',
@@ -231,8 +246,11 @@ export default function PublicRegistrationPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full text-white font-bold py-3 rounded-lg transition disabled:opacity-50"
-            style={{ backgroundColor: event.accent_color }}
+            className="w-full font-bold py-3 rounded-lg transition disabled:opacity-50"
+            style={{
+              backgroundColor: event.accent_color,
+              color: getContrastTextColor(event.accent_color)
+            }}
           >
             {submitting ? 'Confirmando inscrição...' : 'Confirmar Inscrição e Gerar QR Code'}
           </button>

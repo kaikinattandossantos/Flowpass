@@ -22,3 +22,17 @@ input::placeholder,
 textarea::placeholder {
   color: #64748b;
 }
+
+input,
+textarea,
+select {
+  color: #111827;
+}
+
+.bg-white,
+.bg-gray-50,
+.bg-green-50,
+.bg-amber-50,
+.bg-red-50 {
+  color: #111827;
+}

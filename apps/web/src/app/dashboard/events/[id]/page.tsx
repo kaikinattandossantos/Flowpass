@@ -61,6 +61,7 @@ interface Registration {
   category?: {
     name: string
   }
+  checkins?: Array<{ checked_at: string }>
 }
 
 interface CreatedOperator extends Operator {
@@ -203,7 +204,7 @@ export default function EventDetailsPage() {
               <h1 className="text-3xl font-bold text-[#0B1F3A]">{event.name}</h1>
               <div className="flex items-center gap-4 mt-2">
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  event.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  event.status === 'active' ? 'bg-green-100 text-gray-900' : 'bg-gray-100 text-gray-900'
                 }`}>
                   {event.status === 'active' ? 'Ativo' : 'Rascunho'}
                 </span>
@@ -217,6 +218,12 @@ export default function EventDetailsPage() {
               )}
             </div>
             <div className="flex gap-2">
+              <button
+                onClick={() => router.push(`/dashboard/events/${eventId}/credenciamento`)}
+                className="px-4 py-2 bg-[#0B1F3A] text-white rounded-lg hover:bg-[#163456]"
+              >
+                Credenciamento
+              </button>
               <button
                 onClick={() => router.push(`/dashboard/events/${eventId}/live`)}
                 className="px-4 py-2 bg-[#00C896] text-white rounded-lg hover:bg-[#00a876]"
@@ -250,7 +257,7 @@ export default function EventDetailsPage() {
                     .map((field) => (
                       <div key={field.id} className="p-3 bg-gray-50 rounded-lg">
                         <p className="font-medium text-gray-900">{field.label}</p>
-                        <p className="text-xs text-gray-800">
+                        <p className="text-xs text-gray-900">
                           {field.type} {field.required ? '· obrigatório' : '· opcional'}
                         </p>
                       </div>
@@ -324,24 +331,41 @@ export default function EventDetailsPage() {
                       <th className="px-4 py-2 text-left font-semibold text-gray-900">Nome</th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-900">E-mail</th>
                       <th className="px-4 py-2 text-left font-semibold text-gray-900">Categoria</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-900">Status</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-900">Inscrição</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-900">Presença</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredRegistrations.length === 0 ? (
-                      <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-900">Nenhum inscrito</td></tr>
+                      <tr><td colSpan={5} className="px-4 py-4 text-center text-gray-900">Nenhum inscrito</td></tr>
                     ) : (
                       filteredRegistrations.map(reg => (
-                        <tr key={reg.id} className="border-b hover:bg-gray-50">
+                        <tr key={reg.id} className="border-b hover:bg-gray-50 text-gray-900">
                           <td className="px-4 py-3">{reg.name}</td>
                           <td className="px-4 py-3">{reg.email}</td>
                           <td className="px-4 py-3">{reg.category?.name}</td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                              reg.status === 'confirmed' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              reg.status === 'confirmed' ? 'bg-green-100 text-gray-900' : 'bg-gray-100 text-gray-900'
                             }`}>
-                              {reg.status}
+                              {reg.status === 'confirmed' ? 'Confirmada' : reg.status}
                             </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {reg.checkins && reg.checkins.length > 0 ? (
+                              <div>
+                                <span className="px-2 py-1 rounded text-xs font-semibold bg-[#00C896]/15 text-gray-900">
+                                  Presente
+                                </span>
+                                <p className="text-xs text-gray-900 mt-1">
+                                  {new Date(reg.checkins[0].checked_at).toLocaleString('pt-BR')}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="px-2 py-1 rounded text-xs font-semibold bg-gray-100 text-gray-900">
+                                Ausente
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -364,10 +388,10 @@ export default function EventDetailsPage() {
                         className="w-4 h-4 rounded-full"
                         style={{ backgroundColor: category.color || '#00C896' }}
                       />
-                      <span className="font-medium text-gray-800">{category.name}</span>
+                      <span className="font-medium text-gray-900">{category.name}</span>
                     </div>
                     {category.max_capacity && (
-                      <span className="text-xs text-gray-800">Cap. {category.max_capacity}</span>
+                      <span className="text-xs text-gray-900">Cap. {category.max_capacity}</span>
                     )}
                   </div>
                 ))}
@@ -405,10 +429,10 @@ export default function EventDetailsPage() {
             <div className="space-y-2 mb-4">
               {operators.map(op => (
                 <div key={op.id} className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800">{op.name}</p>
+                  <p className="font-semibold text-gray-900">{op.name}</p>
                   <p className="text-xs text-gray-900">{op.email}</p>
                   <span className={`inline-block mt-1 px-2 py-1 text-xs rounded ${
-                    op.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    op.active ? 'bg-green-100 text-gray-900' : 'bg-red-100 text-gray-900'
                   }`}>
                     {op.active ? 'Ativo' : 'Revogado'}
                   </span>
@@ -430,8 +454,8 @@ export default function EventDetailsPage() {
                   
                   {createdOperator ? (
                     <div className="space-y-4">
-                      <p className="text-green-600 font-semibold">Operador criado com sucesso!</p>
-                      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                      <p className="text-gray-900 font-semibold">Operador criado com sucesso!</p>
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-gray-900">
                         <p><strong>Nome:</strong> {createdOperator.name}</p>
                         <p><strong>E-mail:</strong> {createdOperator.email}</p>
                         <p><strong>Senha Temporária:</strong> <code className="bg-gray-200 px-2 py-1 rounded">{createdOperator.temp_password}</code></p>
@@ -473,7 +497,7 @@ export default function EventDetailsPage() {
                         <button
                           type="button"
                           onClick={() => setShowOperatorModal(false)}
-                          className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                          className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-900"
                         >
                           Cancelar
                         </button>

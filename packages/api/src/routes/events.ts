@@ -185,7 +185,16 @@ export async function eventRoutes(app: FastifyInstance) {
         categories: true,
         form_fields: true,
         registrations: {
-          orderBy: { created_at: 'desc' }
+          orderBy: { created_at: 'desc' },
+          include: {
+            category: { select: { name: true } },
+            checkins: {
+              where: { is_duplicate: false },
+              orderBy: { checked_at: 'desc' },
+              take: 1,
+              select: { checked_at: true }
+            }
+          }
         },
         operators: {
           include: { user: true }

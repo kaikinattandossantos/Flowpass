@@ -1,6 +1,7 @@
 'use client'
 
 import { formatEventAddress } from '@/lib/address'
+import { getContrastMutedTextColor, getContrastTextColor } from '@/lib/color-contrast'
 
 interface TicketCardProps {
   participantName: string
@@ -34,15 +35,23 @@ export function TicketCard({
   ticketUrl,
   accentColor = '#00C896'
 }: TicketCardProps) {
+  const headerTextColor = getContrastTextColor(accentColor)
+  const headerMutedColor = getContrastMutedTextColor(accentColor)
+
   return (
     <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-      <div className="p-6 text-center" style={{ backgroundColor: accentColor }}>
-        <p className="text-white/90 text-sm uppercase tracking-wider">Seu ingresso</p>
-        <h1 className="text-2xl font-bold text-white mt-1">{eventName}</h1>
+      <div
+        className="p-6 text-center"
+        style={{ backgroundColor: accentColor, color: headerTextColor }}
+      >
+        <p className="text-sm uppercase tracking-wider" style={{ color: headerMutedColor }}>
+          Seu ingresso
+        </p>
+        <h1 className="text-2xl font-bold mt-1">{eventName}</h1>
       </div>
 
       <div className="p-8 text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 text-green-600 mb-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 text-gray-900 mb-4">
           <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
           </svg>
@@ -78,13 +87,13 @@ export function TicketCard({
           <p><strong>Local:</strong> {formatEventAddress(address)}</p>
         </div>
 
-        <p className="text-sm text-gray-800 mt-4">
+        <p className="text-sm text-gray-900 mt-4">
           Também enviamos o QR Code para <strong>{participantEmail}</strong>.
           Guarde este código ou acesse o link do ingresso novamente quando precisar.
         </p>
 
         {ticketUrl && (
-          <p className="text-xs text-gray-800 mt-3 break-all">
+          <p className="text-xs text-gray-900 mt-3 break-all">
             Link do ingresso: {ticketUrl}
           </p>
         )}
