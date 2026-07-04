@@ -10,6 +10,11 @@ export async function sendConfirmationEmail(data: {
   qrCodeUrl: string,
   companyName: string
 }) {
+  if (!process.env.RESEND_API_KEY) {
+    console.log(`[email:dev] Confirmação para ${data.email} - evento ${data.eventName}`)
+    return
+  }
+
   try {
     await resend.emails.send({
       from: 'FlowPass <no-reply@flowpass.com>',

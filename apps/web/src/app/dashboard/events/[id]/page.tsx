@@ -13,6 +13,15 @@ interface Category {
   max_capacity?: number | null
 }
 
+interface FormField {
+  id: string
+  label: string
+  type: string
+  required: boolean
+  options?: string[] | null
+  order: number
+}
+
 interface Event {
   id: string
   name: string
@@ -32,6 +41,7 @@ interface Event {
   accent_color: string
   welcome_message?: string | null
   categories: Category[]
+  form_fields: FormField[]
   registrations: Registration[]
   operators: Operator[]
 }
@@ -72,6 +82,13 @@ export default function EventDetailsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [newCategory, setNewCategory] = useState({ name: '', color: '#00C896' })
   const [addingCategory, setAddingCategory] = useState(false)
+  const [newFormField, setNewFormField] = useState({
+    label: '',
+    type: 'text',
+    required: false,
+    options: ''
+  })
+  const [addingFormField, setAddingFormField] = useState(false)
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -130,10 +147,43 @@ export default function EventDetailsPage() {
     }
   }
 
+  const handleAddFormField = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newFormField.label.trim()) return
+
+    setAddingFormField(true)
+    try {
+      const token = localStorage.getItem('token')
+      const options = newFormField.options
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+
+      const res = await axios.post(
+        `${API_URL}/events/${eventId}/form-fields`,
+        {
+          label: newFormField.label.trim(),
+          type: newFormField.type,
+          required: newFormField.required,
+          ...(options.length ? { options } : {})
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      setEvent((prev) => prev ? { ...prev, form_fields: [...prev.form_fields, res.data] } : prev)
+      setNewFormField({ label: '', type: 'text', required: false, options: '' })
+      toast.success('Pergunta adicionada ao formulário!')
+    } catch {
+      toast.error('Erro ao adicionar pergunta')
+    } finally {
+      setAddingFormField(false)
+    }
+  }
+
   const copyInscriptionLink = () => {
     const link = `${window.location.origin}/inscrever/${eventId}`
     navigator.clipboard.writeText(link)
-    toast.success('Link copiado!')
+    toast.success('Link de inscrição copiado!')
   }
 
   if (loading) return <div className="p-8">Carregando...</div>
@@ -185,6 +235,77 @@ export default function EventDetailsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-[#0B1F3A]">Formulário do Participante</h2>
+                <span className="text-sm text-gray-900">{event.form_fields.length} pergunta(s)</span>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                {event.form_fields.length === 0 ? (
+                  <p className="text-gray-900 text-sm">Nenhuma pergunta extra configurada.</p>
+                ) : (
+                  event.form_fields
+                    .sort((a, b) => a.order - b.order)
+                    .map((field) => (
+                      <div key={field.id} className="p-3 bg-gray-50 rounded-lg">
+                        <p className="font-medium text-gray-900">{field.label}</p>
+                        <p className="text-xs text-gray-800">
+                          {field.type} {field.required ? '· obrigatório' : '· opcional'}
+                        </p>
+                      </div>
+                    ))
+                )}
+              </div>
+
+              <form onSubmit={handleAddFormField} className="space-y-3 border-t pt-4">
+                <input
+                  type="text"
+                  placeholder="Nova pergunta (ex: Empresa, Tamanho da camiseta)"
+                  value={newFormField.label}
+                  onChange={(e) => setNewFormField({ ...newFormField, label: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <select
+                    value={newFormField.type}
+                    onChange={(e) => setNewFormField({ ...newFormField, type: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                  >
+                    <option value="text">Texto</option>
+                    <option value="email">E-mail</option>
+                    <option value="phone">Telefone</option>
+                    <option value="cpf">CPF</option>
+                    <option value="number">Número</option>
+                    <option value="select">Seleção única</option>
+                    <option value="multi_select">Múltipla escolha</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Opções separadas por vírgula (se aplicável)"
+                    value={newFormField.options}
+                    onChange={(e) => setNewFormField({ ...newFormField, options: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-gray-900">
+                  <input
+                    type="checkbox"
+                    checked={newFormField.required}
+                    onChange={(e) => setNewFormField({ ...newFormField, required: e.target.checked })}
+                  />
+                  Campo obrigatório
+                </label>
+                <button
+                  type="submit"
+                  disabled={addingFormField}
+                  className="w-full py-2 bg-[#0B1F3A] text-white rounded-lg hover:bg-[#163456] disabled:opacity-50"
+                >
+                  {addingFormField ? 'Adicionando...' : '+ Adicionar pergunta'}
+                </button>
+              </form>
+            </div>
+
             <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
               <h2 className="text-2xl font-bold text-[#0B1F3A] mb-4">Inscritos ({event.registrations.length})</h2>
               

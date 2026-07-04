@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import axios, { isAxiosError } from 'axios'
 import toast from 'react-hot-toast'
 import { formatEventAddress, normalizeCep } from '@/lib/address'
+import type { FormFieldDraft } from '@/lib/form-fields'
+import { FormFieldBuilder } from '@/components/participant/ParticipantFormFields'
 
 interface Category {
   name: string
@@ -13,7 +15,7 @@ interface Category {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
-const TOTAL_STEPS = 4
+const TOTAL_STEPS = 5
 
 function getApiErrorMessage(error: unknown, fallback: string) {
   if (!isAxiosError(error)) return fallback
@@ -50,6 +52,8 @@ export default function NewEventPage() {
     { name: 'Geral', color: '#00C896' }
   ])
 
+  const [formFields, setFormFields] = useState<FormFieldDraft[]>([])
+
   const [customization, setCustomization] = useState({
     banner_color: '#0B1F3A',
     accent_color: '#00C896',
@@ -76,6 +80,17 @@ export default function NewEventPage() {
       if (validCategories.length === 0) return 'Adicione pelo menos uma categoria.'
     }
 
+    if (currentStep === 4) {
+      const invalidField = formFields.find((field) => !field.label.trim())
+      if (invalidField) return 'Todas as perguntas do formulário precisam de um título.'
+      const invalidSelect = formFields.find(
+        (field) =>
+          ['select', 'multi_select'].includes(field.type) &&
+          (!field.options || field.options.length === 0)
+      )
+      if (invalidSelect) return `O campo "${invalidSelect.label || 'sem título'}" precisa de opções.`
+    }
+
     return null
   }
 
@@ -91,7 +106,7 @@ export default function NewEventPage() {
   }
 
   const handleCreateEvent = async (status: 'draft' | 'active') => {
-    const error = validateStep(1) || validateStep(2) || validateStep(3)
+    const error = validateStep(1) || validateStep(2) || validateStep(3) || validateStep(4)
     if (error) {
       setErrorMessage(error)
       toast.error(error)
@@ -126,6 +141,15 @@ export default function NewEventPage() {
             name: cat.name.trim(),
             color: cat.color || '#00C896',
             ...(cat.max_capacity ? { max_capacity: cat.max_capacity } : {})
+          })),
+        form_fields: formFields
+          .filter((field) => field.label.trim())
+          .map((field, index) => ({
+            label: field.label.trim(),
+            type: field.type,
+            required: field.required,
+            order: index,
+            ...(field.options?.length ? { options: field.options } : {})
           }))
       }
 
@@ -164,7 +188,7 @@ export default function NewEventPage() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-[#0B1F3A]">Novo Evento</h1>
-            <p className="text-gray-900 mt-1">Configure informações, local, categorias e personalização.</p>
+            <p className="text-gray-900 mt-1">Configure informações, local, categorias, formulário e personalização.</p>
           </div>
           <div className="text-sm text-gray-900">Etapa {step} de {TOTAL_STEPS}</div>
         </div>
@@ -397,6 +421,18 @@ export default function NewEventPage() {
 
           {step === 4 && (
             <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-[#0B1F3A]">Formulário do Participante</h2>
+                <p className="text-sm text-gray-900 mt-1">
+                  Defina as perguntas que os clientes responderão ao se inscrever.
+                </p>
+              </div>
+              <FormFieldBuilder fields={formFields} onChange={setFormFields} />
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-6">
               <h2 className="text-xl font-semibold text-[#0B1F3A]">Personalização e Revisão</h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -452,6 +488,7 @@ export default function NewEventPage() {
                 <p><strong>Período:</strong> {general.start_at ? new Date(general.start_at).toLocaleString('pt-BR') : '-'} até {general.end_at ? new Date(general.end_at).toLocaleString('pt-BR') : '-'}</p>
                 <p><strong>Endereço:</strong> {formattedAddress || '-'}</p>
                 <p><strong>Categorias:</strong> {categories.filter((c) => c.name.trim()).map((c) => c.name).join(', ') || '-'}</p>
+                <p><strong>Perguntas do formulário:</strong> {formFields.filter((f) => f.label.trim()).length || 'Nenhuma'}</p>
               </div>
             </div>
           )}

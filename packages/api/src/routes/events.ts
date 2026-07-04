@@ -13,6 +13,14 @@ const categorySchema = z.object({
   color: z.string().optional()
 })
 
+const formFieldSchema = z.object({
+  label: z.string().min(1),
+  type: z.enum(['text', 'email', 'phone', 'cpf', 'select', 'multi_select', 'number']),
+  required: z.boolean().default(false),
+  options: z.array(z.string()).optional(),
+  order: z.number().int().default(0)
+})
+
 const eventBodySchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
@@ -32,7 +40,8 @@ const eventBodySchema = z.object({
   is_paid: z.boolean().default(false),
   waitlist_enabled: z.boolean().default(false),
   status: z.enum(['draft', 'active']).default('active'),
-  categories: z.array(categorySchema).min(1)
+  categories: z.array(categorySchema).min(1),
+  form_fields: z.array(formFieldSchema).default([])
 })
 
 const publicEventSelect = {
@@ -134,9 +143,18 @@ export async function eventRoutes(app: FastifyInstance) {
             max_capacity: category.max_capacity,
             color: category.color || '#00C896'
           }))
+        },
+        form_fields: {
+          create: data.form_fields.map((field, index) => ({
+            label: field.label.trim(),
+            type: field.type,
+            required: field.required,
+            options: field.options?.length ? field.options : undefined,
+            order: field.order ?? index
+          }))
         }
       },
-      include: { categories: true }
+      include: { categories: true, form_fields: true }
     })
 
     return event
@@ -203,6 +221,61 @@ export async function eventRoutes(app: FastifyInstance) {
         color: request.body.color || '#00C896'
       }
     })
+  })
+
+  app.withTypeProvider<ZodTypeProvider>().post('/events/:id/form-fields', {
+    preHandler: [requireAuth],
+    schema: {
+      params: z.object({ id: z.string().uuid() }),
+      body: formFieldSchema
+    }
+  }, async (request, reply) => {
+    const { id: event_id } = request.params
+    const { company_id } = getJwtUser(request)
+
+    const event = await prisma.event.findFirst({
+      where: { id: event_id, company_id }
+    })
+
+    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
+
+    const count = await prisma.formField.count({ where: { event_id } })
+
+    return prisma.formField.create({
+      data: {
+        event_id,
+        label: request.body.label.trim(),
+        type: request.body.type,
+        required: request.body.required,
+        options: request.body.options?.length ? request.body.options : undefined,
+        order: request.body.order ?? count
+      }
+    })
+  })
+
+  app.withTypeProvider<ZodTypeProvider>().delete('/events/:id/form-fields/:fieldId', {
+    preHandler: [requireAuth],
+    schema: {
+      params: z.object({ id: z.string().uuid(), fieldId: z.string().uuid() })
+    }
+  }, async (request, reply) => {
+    const { id: event_id, fieldId } = request.params
+    const { company_id } = getJwtUser(request)
+
+    const event = await prisma.event.findFirst({
+      where: { id: event_id, company_id }
+    })
+
+    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
+
+    const field = await prisma.formField.findFirst({
+      where: { id: fieldId, event_id }
+    })
+
+    if (!field) return reply.status(404).send({ message: 'Campo não encontrado' })
+
+    await prisma.formField.delete({ where: { id: fieldId } })
+    return reply.status(204).send()
   })
 
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/operators', {
