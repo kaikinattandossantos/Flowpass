@@ -76,15 +76,15 @@ export default function LivePage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-600 text-sm">Inscritos</p>
+          <p className="text-gray-800 text-sm font-medium">Inscritos</p>
           <p className="text-4xl font-bold text-[#0B1F3A]">{stats?.total_registered || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-600 text-sm">Entradas Confirmadas</p>
+          <p className="text-gray-800 text-sm font-medium">Entradas Confirmadas</p>
           <p className="text-4xl font-bold text-[#00C896]">{stats?.total_checked_in || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
-          <p className="text-gray-600 text-sm">Taxa de Entrada</p>
+          <p className="text-gray-800 text-sm font-medium">Taxa de Entrada</p>
           <p className="text-4xl font-bold text-[#0B1F3A]">
             {stats ? Math.round((stats.total_checked_in / stats.total_registered) * 100) : 0}%
           </p>
@@ -111,15 +111,15 @@ export default function LivePage() {
         <h2 className="text-xl font-semibold text-[#0B1F3A] mb-4">Últimas Entradas</h2>
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {checkins.length === 0 ? (
-            <p className="text-gray-600">Nenhuma entrada ainda</p>
+            <p className="text-gray-900">Nenhuma entrada ainda</p>
           ) : (
             checkins.map((checkin, idx) => (
               <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <div>
                   <p className="font-semibold text-[#0B1F3A]">{checkin.name}</p>
-                  <p className="text-sm text-gray-600">{checkin.category}</p>
+                  <p className="text-sm text-gray-900">{checkin.category}</p>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-800">
                   {new Date(checkin.checked_at).toLocaleTimeString('pt-BR')}
                 </p>
               </div>

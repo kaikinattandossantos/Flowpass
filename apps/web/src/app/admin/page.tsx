@@ -78,7 +78,7 @@ export default function AdminPage() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h2 className="text-3xl font-bold text-[#0B1F3A]">Empresas</h2>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-900 mt-1">
               O administrador cadastra empresas. Cada empresa cria seus próprios eventos.
             </p>
           </div>
@@ -91,10 +91,10 @@ export default function AdminPage() {
         </div>
 
         {loading ? (
-          <p className="text-gray-600">Carregando empresas...</p>
+          <p className="text-gray-900">Carregando empresas...</p>
         ) : companies.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-600 mb-4">Nenhuma empresa cadastrada ainda.</p>
+            <p className="text-gray-900 mb-4">Nenhuma empresa cadastrada ainda.</p>
             <button
               onClick={() => router.push('/admin/companies/new')}
               className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg"
@@ -107,11 +107,11 @@ export default function AdminPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Empresa</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">CNPJ</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">E-mail</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Eventos</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700">Usuários</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Empresa</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">CNPJ</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">E-mail</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Eventos</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Usuários</th>
                 </tr>
               </thead>
               <tbody>

@@ -91,11 +91,11 @@ export default function DashboardPage() {
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-600">Carregando eventos...</p>
+            <p className="text-gray-900">Carregando eventos...</p>
           </div>
         ) : events.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-600 mb-4">Nenhum evento criado ainda</p>
+            <p className="text-gray-900 mb-4">Nenhum evento criado ainda</p>
             <button
               onClick={() => router.push('/dashboard/events/new')}
               className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg"
@@ -117,7 +117,7 @@ export default function DashboardPage() {
                     {event.status === 'draft' ? 'Rascunho' : event.status === 'active' ? 'Ativo' : 'Finalizado'}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-900">
                   {new Date(event.start_at).toLocaleDateString('pt-BR')}
                 </p>
               </div>

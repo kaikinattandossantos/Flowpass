@@ -12,7 +12,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <p className="text-gray-600">Redirecionando...</p>
+      <p className="text-gray-900">Redirecionando...</p>
     </div>
   )
 }

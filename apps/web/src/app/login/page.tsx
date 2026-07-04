@@ -36,11 +36,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-lg shadow-xl p-8">
           <h1 className="text-3xl font-bold text-[#0B1F3A] mb-2">FlowPass</h1>
-          <p className="text-gray-600 mb-8">Acesso para administradores e empresas</p>
+          <p className="text-gray-900 mb-8">Acesso para administradores e empresas</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">E-mail</label>
               <input
                 type="email"
                 value={email}
@@ -51,7 +51,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Senha</label>
               <input
                 type="password"
                 value={password}
@@ -70,7 +70,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 space-y-2 text-xs text-gray-500">
+          <div className="mt-6 space-y-2 text-xs text-gray-800">
             <p><strong>Admin plataforma:</strong> superadmin@flowpass.com.br / flowpass123</p>
             <p><strong>Empresa demo:</strong> admin@flowpass.com.br / flowpass123</p>
           </div>

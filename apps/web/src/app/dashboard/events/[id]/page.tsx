@@ -4,13 +4,34 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { formatEventAddress } from '@/lib/address'
+
+interface Category {
+  id: string
+  name: string
+  color?: string | null
+  max_capacity?: number | null
+}
 
 interface Event {
   id: string
   name: string
+  description?: string | null
   status: 'draft' | 'active' | 'finished'
   start_at: string
-  location: string
+  end_at: string
+  location?: string | null
+  street: string
+  number: string
+  complement?: string | null
+  neighborhood?: string | null
+  city?: string | null
+  state?: string | null
+  cep: string
+  banner_color: string
+  accent_color: string
+  welcome_message?: string | null
+  categories: Category[]
   registrations: Registration[]
   operators: Operator[]
 }
@@ -49,6 +70,8 @@ export default function EventDetailsPage() {
   const [newOperator, setNewOperator] = useState({ name: '', email: '' })
   const [createdOperator, setCreatedOperator] = useState<CreatedOperator | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [newCategory, setNewCategory] = useState({ name: '', color: '#00C896' })
+  const [addingCategory, setAddingCategory] = useState(false)
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -85,6 +108,28 @@ export default function EventDetailsPage() {
     }
   }
 
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCategory.name.trim()) return
+
+    setAddingCategory(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await axios.post(
+        `${API_URL}/events/${eventId}/categories`,
+        { name: newCategory.name.trim(), color: newCategory.color },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      setEvent((prev) => prev ? { ...prev, categories: [...prev.categories, res.data] } : prev)
+      setNewCategory({ name: '', color: '#00C896' })
+      toast.success('Categoria adicionada!')
+    } catch {
+      toast.error('Erro ao adicionar categoria')
+    } finally {
+      setAddingCategory(false)
+    }
+  }
+
   const copyInscriptionLink = () => {
     const link = `${window.location.origin}/inscrever/${eventId}`
     navigator.clipboard.writeText(link)
@@ -112,9 +157,14 @@ export default function EventDetailsPage() {
                 }`}>
                   {event.status === 'active' ? 'Ativo' : 'Rascunho'}
                 </span>
-                <span className="text-gray-600">{new Date(event.start_at).toLocaleDateString('pt-BR')}</span>
-                <span className="text-gray-600">{event.location}</span>
+                <span className="text-gray-900">{new Date(event.start_at).toLocaleDateString('pt-BR')}</span>
+                <span className="text-gray-900">
+                  {formatEventAddress(event)}
+                </span>
               </div>
+              {event.welcome_message && (
+                <p className="text-gray-900 mt-3 text-sm">{event.welcome_message}</p>
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -150,15 +200,15 @@ export default function EventDetailsPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Nome</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">E-mail</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Categoria</th>
-                      <th className="px-4 py-2 text-left font-semibold text-gray-700">Status</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-900">Nome</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-900">E-mail</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-900">Categoria</th>
+                      <th className="px-4 py-2 text-left font-semibold text-gray-900">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredRegistrations.length === 0 ? (
-                      <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-600">Nenhum inscrito</td></tr>
+                      <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-900">Nenhum inscrito</td></tr>
                     ) : (
                       filteredRegistrations.map(reg => (
                         <tr key={reg.id} className="border-b hover:bg-gray-50">
@@ -181,14 +231,61 @@ export default function EventDetailsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="space-y-8">
+            <div className="bg-white rounded-lg shadow-lg p-8">
+              <h2 className="text-2xl font-bold text-[#0B1F3A] mb-4">Categorias ({event.categories.length})</h2>
+
+              <div className="space-y-2 mb-4">
+                {event.categories.map((category) => (
+                  <div key={category.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: category.color || '#00C896' }}
+                      />
+                      <span className="font-medium text-gray-800">{category.name}</span>
+                    </div>
+                    {category.max_capacity && (
+                      <span className="text-xs text-gray-800">Cap. {category.max_capacity}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={handleAddCategory} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Nova categoria (ex: VIP, Staff)"
+                  value={newCategory.name}
+                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={newCategory.color}
+                    onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
+                    className="w-16 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                  />
+                  <button
+                    type="submit"
+                    disabled={addingCategory}
+                    className="flex-1 py-2 bg-[#0B1F3A] text-white rounded-lg hover:bg-[#163456] disabled:opacity-50"
+                  >
+                    {addingCategory ? 'Adicionando...' : '+ Adicionar Categoria'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg p-8">
             <h2 className="text-2xl font-bold text-[#0B1F3A] mb-4">Operadores ({operators.length})</h2>
             
             <div className="space-y-2 mb-4">
               {operators.map(op => (
                 <div key={op.id} className="p-3 bg-gray-50 rounded-lg">
                   <p className="font-semibold text-gray-800">{op.name}</p>
-                  <p className="text-xs text-gray-600">{op.email}</p>
+                  <p className="text-xs text-gray-900">{op.email}</p>
                   <span className={`inline-block mt-1 px-2 py-1 text-xs rounded ${
                     op.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
@@ -232,7 +329,7 @@ export default function EventDetailsPage() {
                   ) : (
                     <form onSubmit={handleCreateOperator} className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                        <label className="block text-sm font-medium text-gray-900 mb-1">Nome</label>
                         <input
                           type="text"
                           required
@@ -242,7 +339,7 @@ export default function EventDetailsPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                        <label className="block text-sm font-medium text-gray-900 mb-1">E-mail</label>
                         <input
                           type="email"
                           required
@@ -271,6 +368,7 @@ export default function EventDetailsPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       </div>

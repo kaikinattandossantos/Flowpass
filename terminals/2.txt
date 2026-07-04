@@ -3,7 +3,7 @@ pid: 7716
 cwd: "C:\Users\kaiki\OneDrive\Documentos\flowpass_mvp_updated\flowpass"
 command: "docker ps --format \"table {{.Names}}\\t{{.Status}}\\t{{.Ports}}\" 2>&1; Write-Host \"---\"; Test-NetConnection -ComputerName localhost -Port 55432 -WarningAction SilentlyContinue | Select-Object TcpTestSucceeded; Test-NetConnection -ComputerName localhost -Port 3333 -WarningAction SilentlyContinue | Select-Object TcpTestSucceeded; Test-NetConnection -ComputerName localhost -Port 3000 -WarningAction SilentlyContinue | Select-Object TcpTestSucceeded"
 started_at: 2026-07-04T16:24:28.369Z
-running_for_ms: 8360007  
+running_for_ms: 9195012  
 ---
 docker : failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is 
 correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: O sistema não pode encontrar o arquivo 

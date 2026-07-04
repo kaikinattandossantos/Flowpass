@@ -49,6 +49,16 @@ model Event {
   start_at         DateTime
   end_at           DateTime
   location         String?
+  cep              String
+  street           String
+  number           String
+  complement       String?
+  neighborhood     String?
+  city             String?
+  state            String?
+  banner_color     String         @default("#0B1F3A")
+  accent_color     String         @default("#00C896")
+  welcome_message  String?
   max_capacity     Int?
   is_paid          Boolean        @default(false)
   waitlist_enabled Boolean        @default(false)

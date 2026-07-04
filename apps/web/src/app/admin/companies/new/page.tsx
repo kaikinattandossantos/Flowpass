@@ -87,13 +87,13 @@ export default function NewCompanyPage() {
 
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h1 className="text-3xl font-bold text-[#0B1F3A] mb-2">Cadastrar Empresa</h1>
-          <p className="text-gray-600 mb-8">
+          <p className="text-gray-900 mb-8">
             Crie a conta da empresa e do gestor responsável pelos eventos.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Nome da Empresa</label>
               <input
                 type="text"
                 required
@@ -104,7 +104,7 @@ export default function NewCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">CNPJ</label>
               <input
                 type="text"
                 required
@@ -116,7 +116,7 @@ export default function NewCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Gestor</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Nome do Gestor</label>
               <input
                 type="text"
                 required
@@ -127,7 +127,7 @@ export default function NewCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-mail do Gestor</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">E-mail do Gestor</label>
               <input
                 type="email"
                 required
@@ -138,7 +138,7 @@ export default function NewCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Senha inicial</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Senha inicial</label>
               <input
                 type="password"
                 required
@@ -149,7 +149,7 @@ export default function NewCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar Senha</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Confirmar Senha</label>
               <input
                 type="password"
                 required

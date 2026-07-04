@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { formatEventAddress } from '@/lib/address'
 
 interface FormField {
   id: string
@@ -19,8 +20,18 @@ interface EventData {
   name: string
   description: string
   start_at: string
-  location: string
-  categories: Array<{ id: string, name: string }>
+  location?: string | null
+  street: string
+  number: string
+  complement?: string | null
+  neighborhood?: string | null
+  city?: string | null
+  state?: string | null
+  cep: string
+  banner_color: string
+  accent_color: string
+  welcome_message?: string | null
+  categories: Array<{ id: string, name: string, color?: string | null }>
   form_fields: FormField[]
 }
 
@@ -83,7 +94,7 @@ export default function PublicRegistrationPage() {
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
           </div>
           <h1 className="text-2xl font-bold text-[#0B1F3A] mb-2">Inscrição Confirmada!</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-900">
             Enviamos um e-mail de confirmação com seu QR Code único para entrada no evento.
             {baseInfo.phone ? ' Também enviamos pelo WhatsApp, se informado.' : ''}
           </p>
@@ -95,19 +106,31 @@ export default function PublicRegistrationPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
-        <div className="bg-[#0B1F3A] p-8 text-white">
+        <div className="p-8 text-white" style={{ backgroundColor: event.banner_color }}>
           <h1 className="text-3xl font-bold mb-2">{event.name}</h1>
-          <p className="text-gray-300">{event.description}</p>
-          <div className="mt-4 flex flex-wrap gap-4 text-sm">
-            <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> {new Date(event.start_at).toLocaleDateString('pt-BR')}</span>
-            <span className="flex items-center"><svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> {event.location}</span>
+          <p className="text-white/80">
+            {event.welcome_message || event.description}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-4 text-sm text-white/90">
+            <span className="flex items-center">
+              {new Date(event.start_at).toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+            <span className="flex items-center">
+              {formatEventAddress(event)}
+            </span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria de Acesso</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Categoria de Acesso</label>
               <select 
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
@@ -121,7 +144,7 @@ export default function PublicRegistrationPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">Nome Completo</label>
               <input 
                 type="text" 
                 required
@@ -132,7 +155,7 @@ export default function PublicRegistrationPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">E-mail</label>
               <input 
                 type="email" 
                 required
@@ -143,7 +166,7 @@ export default function PublicRegistrationPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+              <label className="block text-sm font-medium text-gray-900 mb-1">WhatsApp</label>
               <input 
                 type="tel" 
                 value={baseInfo.phone}
@@ -157,7 +180,7 @@ export default function PublicRegistrationPage() {
           <div className="border-t pt-6 space-y-6">
             {event.form_fields.sort((a,b) => a.order - b.order).map(field => (
               <div key={field.id}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   {field.label} {field.required && <span className="text-red-500">*</span>}
                 </label>
                 
@@ -184,7 +207,7 @@ export default function PublicRegistrationPage() {
                           }}
                           className="mr-2"
                         />
-                        <span className="text-sm text-gray-600">{opt}</span>
+                        <span className="text-sm text-gray-900">{opt}</span>
                       </label>
                     ))}
                   </div>
@@ -203,7 +226,8 @@ export default function PublicRegistrationPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-[#00C896] hover:bg-[#00a876] text-white font-bold py-3 rounded-lg transition disabled:opacity-50"
+            className="w-full text-white font-bold py-3 rounded-lg transition disabled:opacity-50"
+            style={{ backgroundColor: event.accent_color }}
           >
             {submitting ? 'Enviando...' : 'Confirmar Inscrição'}
           </button>
