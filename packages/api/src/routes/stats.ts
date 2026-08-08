@@ -2,18 +2,18 @@ import { FastifyInstance } from 'fastify'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { prisma } from '../../../database'
+import { requireEventInCompany, requireRoles } from '../lib/auth'
 
 export async function statsRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', async (request) => {
-    await request.jwtVerify()
-  })
-
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id/stats', {
+    preHandler: [requireRoles('admin', 'viewer')],
     schema: {
       params: z.object({ id: z.string().uuid() })
     }
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id: event_id } = request.params
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
 
     const [total_registered, total_checked_in, by_category] = await Promise.all([
       prisma.registration.count({ where: { event_id, status: 'confirmed' } }),
@@ -31,7 +31,7 @@ export async function statsRoutes(app: FastifyInstance) {
     return {
       total_registered,
       total_checked_in,
-      by_category: by_category.map((c: any) => ({
+      by_category: by_category.map((c) => ({
         name: c.name,
         checked_in: c._count.registrations
       }))

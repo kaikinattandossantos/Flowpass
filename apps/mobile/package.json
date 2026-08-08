@@ -5,6 +5,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.1.1",
     "axios": "^1.18.1",
+    "dotenv": "^16.6.1",
     "expo": "~56.0.12",
     "expo-av": "^16.0.8",
     "expo-camera": "^56.0.8",

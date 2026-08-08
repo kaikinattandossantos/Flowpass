@@ -20,12 +20,6 @@ export default function Home() {
           >
             Entrar no painel
           </a>
-          <a
-            href="/register"
-            className="rounded-full border border-white/20 px-6 py-3 text-center font-medium text-white transition hover:bg-white/10"
-          >
-            Criar conta
-          </a>
         </div>
       </div>
     </main>

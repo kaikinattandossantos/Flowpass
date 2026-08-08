@@ -8,23 +8,29 @@ datasource db {
 }
 
 model Company {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   name            String
-  cnpj            String   @unique
-  email           String   @unique
+  cnpj            String        @unique
+  email           String        @unique
   logo_url        String?
-  primary_color   String   @default("#0B1F3A")
-  secondary_color String   @default("#00C896")
-  subdomain       String   @unique
-  created_at      DateTime @default(now())
+  primary_color   String        @default("#0B1F3A")
+  secondary_color String        @default("#00C896")
+  subdomain       String        @unique
+  status          CompanyStatus @default(active)
+  created_at      DateTime      @default(now())
   users           User[]
   events          Event[]
 }
 
+enum CompanyStatus {
+  active
+  inactive
+}
+
 model User {
   id            String   @id @default(uuid())
-  company_id    String
-  company       Company  @relation(fields: [company_id], references: [id])
+  company_id    String?
+  company       Company? @relation(fields: [company_id], references: [id])
   name          String
   email         String   @unique
   password_hash String
@@ -34,29 +40,33 @@ model User {
 }
 
 enum Role {
+  super_admin
   admin
   viewer
   operator
 }
 
 model Event {
-  id               String         @id @default(uuid())
-  company_id       String
-  company          Company        @relation(fields: [company_id], references: [id])
-  name             String
-  description      String?
-  start_at         DateTime
-  end_at           DateTime
-  location         String?
-  max_capacity     Int?
-  is_paid          Boolean        @default(false)
-  waitlist_enabled Boolean        @default(false)
-  status           EventStatus    @default(draft)
-  created_at       DateTime       @default(now())
-  categories       Category[]
-  form_fields      FormField[]
-  registrations    Registration[]
-  operators        Operator[]
+  id                String             @id @default(uuid())
+  company_id        String
+  company           Company            @relation(fields: [company_id], references: [id])
+  name              String
+  description       String?
+  start_at          DateTime
+  end_at            DateTime
+  location          String?
+  image_url         String?
+  max_capacity      Int?
+  is_paid           Boolean            @default(false)
+  waitlist_enabled  Boolean            @default(false)
+  status            EventStatus        @default(draft)
+  created_at        DateTime           @default(now())
+  categories        Category[]
+  registration_links RegistrationLink[]
+  access_points       AccessPoint[]
+  registration_forms  RegistrationForm[]
+  registrations       Registration[]
+  operators           Operator[]
 }
 
 enum EventStatus {
@@ -66,52 +76,136 @@ enum EventStatus {
 }
 
 model Category {
-  id            String         @id @default(uuid())
-  event_id      String
-  event         Event          @relation(fields: [event_id], references: [id])
-  name          String
-  max_capacity  Int?
-  color         String?
-  registrations Registration[]
+  id                 String              @id @default(uuid())
+  event_id           String
+  event              Event               @relation(fields: [event_id], references: [id])
+  name               String
+  description        String?
+  max_capacity       Int?
+  color              String?
+  registrations      Registration[]
+  default_for_links  RegistrationLink[]
+  access_points      AccessPointCategory[]
+}
+
+enum RegistrationLinkFormMode {
+  shared
+  own
+}
+
+model RegistrationLink {
+  id                  String                   @id @default(uuid())
+  event_id            String
+  event               Event                    @relation(fields: [event_id], references: [id])
+  name                String
+  slug                String
+  description         String?
+  active              Boolean                  @default(true)
+  default_category_id String?
+  default_category    Category?                @relation(fields: [default_category_id], references: [id])
+  form_mode           RegistrationLinkFormMode @default(shared)
+  created_at          DateTime                 @default(now())
+
+  @@unique([event_id, slug])
+}
+
+model AccessPoint {
+  id          String                @id @default(uuid())
+  event_id    String
+  event       Event                 @relation(fields: [event_id], references: [id])
+  name        String
+  description String?
+  active      Boolean               @default(true)
+  created_at  DateTime              @default(now())
+  categories  AccessPointCategory[]
+}
+
+model AccessPointCategory {
+  access_point_id String
+  access_point    AccessPoint @relation(fields: [access_point_id], references: [id], onDelete: Cascade)
+  category_id     String
+  category        Category    @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@id([access_point_id, category_id])
+}
+
+model RegistrationForm {
+  id                String                 @id @default(uuid())
+  event_id          String
+  event             Event                  @relation(fields: [event_id], references: [id], onDelete: Cascade)
+  name              String
+  public_id         String                 @unique
+  status            RegistrationFormStatus @default(active)
+  structural_config Json
+  created_at        DateTime               @default(now())
+  updated_at        DateTime               @updatedAt
+  form_fields       FormField[]
+  registrations     Registration[]
+
+  @@index([event_id])
+  @@map("registration_forms")
+}
+
+enum RegistrationFormStatus {
+  active
+  inactive
 }
 
 model FormField {
-  id       String    @id @default(uuid())
-  event_id String
-  event    Event     @relation(fields: [event_id], references: [id])
-  label    String
-  type     FieldType
-  required Boolean   @default(false)
-  options  Json?
-  order    Int       @default(0)
+  id                   String           @id @default(uuid())
+  registration_form_id String
+  registration_form    RegistrationForm @relation(fields: [registration_form_id], references: [id], onDelete: Cascade)
+  label                String
+  type                 FieldType
+  required             Boolean          @default(false)
+  placeholder          String?
+  options              Json?
+  order                Int              @default(0)
 }
 
 enum FieldType {
   text
+  textarea
   email
   phone
   cpf
   select
   multi_select
+  checkbox
+  date
   file
   number
 }
 
 model Registration {
-  id                 String             @id @default(uuid())
-  event_id           String
-  event              Event              @relation(fields: [event_id], references: [id])
-  category_id        String
-  category           Category           @relation(fields: [category_id], references: [id])
-  name               String
-  email              String
-  phone              String?
-  form_data          Json
-  qr_token           String?            @unique
-  qr_token_expires_at DateTime?
-  status             RegistrationStatus @default(pending)
-  created_at         DateTime           @default(now())
-  checkins           CheckIn[]
+  id                    String               @id @default(uuid())
+  event_id              String
+  event                 Event                @relation(fields: [event_id], references: [id])
+  registration_form_id  String?
+  registration_form     RegistrationForm?    @relation(fields: [registration_form_id], references: [id], onDelete: SetNull)
+  category_id           String?
+  category              Category?            @relation(fields: [category_id], references: [id])
+  name                  String
+  email                 String?
+  phone                 String?
+  cpf                   String?
+  form_data             Json
+  qr_token              String?              @unique
+  qr_token_expires_at   DateTime?
+  status                RegistrationStatus   @default(pending)
+  origin                RegistrationOrigin   @default(PUBLIC_FORM)
+  created_at            DateTime             @default(now())
+  checkins              CheckIn[]
+
+  @@index([event_id, email])
+  @@index([event_id, cpf])
+  @@index([registration_form_id])
+}
+
+enum RegistrationOrigin {
+  MANUAL
+  IMPORT
+  PUBLIC_FORM
 }
 
 enum RegistrationStatus {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { StyleSheet, Text, View, TouchableOpacity, Alert, TextInput, ScrollView } from 'react-native'
+import { StyleSheet, Text, View, TouchableOpacity, Alert, TextInput, ScrollView, Image } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Audio } from 'expo-av'
 import { initDatabase, validateCheckin, saveRegistrations, getUnsyncedCheckins, markAsSynced } from './services/database.native'
@@ -7,7 +7,7 @@ import { useAuthStore } from './store/auth.native'
 import axios from 'axios'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LogOut, Camera } from 'lucide-react-native'
 
-const API_URL = 'http://localhost:3333'
+import { API_URL } from './config/api'
 
 type Screen = 'login' | 'select-event' | 'sync' | 'scanner'
 
@@ -127,8 +127,12 @@ export default function App() {
   if (screen === 'login') {
     return (
       <View style={styles.loginContainer}>
-        <Text style={styles.loginTitle}>FlowPass</Text>
-        <Text style={styles.loginSubtitle}>Operador de Eventos</Text>
+        <Image
+          source={require('./assets/flowpass_logo.png')}
+          style={styles.loginLogo}
+          resizeMode="contain"
+          accessibilityLabel="FlowPass"
+        />
         <TextInput
           placeholder="E-mail"
           value={email}
@@ -244,8 +248,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B1F3A' },
   loginContainer: { flex: 1, backgroundColor: '#0B1F3A', justifyContent: 'center', padding: 30 },
-  loginTitle: { color: '#00C896', fontSize: 40, fontWeight: 'bold', textAlign: 'center' },
-  loginSubtitle: { color: 'white', fontSize: 18, textAlign: 'center', marginBottom: 40 },
+  loginLogo: { width: '100%', height: 72, marginBottom: 40 },
   input: { backgroundColor: 'white', borderRadius: 10, padding: 15, marginBottom: 15 },
   button: { backgroundColor: '#00C896', padding: 15, borderRadius: 10, alignItems: 'center' },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },

@@ -1,7 +1,35 @@
 import { Resend } from 'resend'
 import axios from 'axios'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let resendClient: Resend | null = null
+let resendWarningLogged = false
+
+function isUsableResendKey(key: string | undefined): key is string {
+  if (!key || key.trim() === '') return false
+  if (/placeholder|your-|re_\.\.\./i.test(key)) return false
+  if (!key.startsWith('re_')) return false
+  return true
+}
+
+function getResendClient(): Resend | null {
+  const key = process.env.RESEND_API_KEY
+
+  if (!isUsableResendKey(key)) {
+    if (!resendWarningLogged) {
+      console.warn(
+        '[communication] RESEND_API_KEY ausente ou placeholder — envio de e-mail desabilitado'
+      )
+      resendWarningLogged = true
+    }
+    return null
+  }
+
+  if (!resendClient) {
+    resendClient = new Resend(key)
+  }
+
+  return resendClient
+}
 
 export async function sendConfirmationEmail(data: {
   email: string,
@@ -10,6 +38,9 @@ export async function sendConfirmationEmail(data: {
   qrCodeUrl: string,
   companyName: string
 }) {
+  const resend = getResendClient()
+  if (!resend) return
+
   try {
     await resend.emails.send({
       from: 'FlowPass <no-reply@flowpass.com>',
@@ -44,6 +75,7 @@ export async function sendWhatsAppMessage(data: {
   const instance = process.env.EVOLUTION_INSTANCE
 
   if (!apiUrl || !apiKey || !instance) return
+  if (/placeholder|your-/i.test(apiUrl + apiKey + instance)) return
 
   try {
     await axios.post(`${apiUrl}/message/sendMedia/${instance}`, {

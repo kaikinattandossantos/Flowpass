@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuthStore } from '@/store/auth'
+import Image from 'next/image'
+import { useAuthStore, getHomeRoute } from '@/store/auth'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
@@ -14,9 +15,9 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await login(email, password)
+      const user = await login(email, password)
       toast.success('Login realizado com sucesso!')
-      router.push('/dashboard')
+      router.push(getHomeRoute(user.role))
     } catch {
       toast.error('Falha ao fazer login')
     }
@@ -26,8 +27,14 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#0B1F3A] to-[#1a3a52] flex items-center justify-center">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-lg shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-[#0B1F3A] mb-2">FlowPass</h1>
-          <p className="text-gray-600 mb-8">Sistema de Credenciamento para Eventos</p>
+          <Image
+            src="/flowpass_logo.png"
+            alt="FlowPass"
+            width={280}
+            height={77}
+            className="h-[72px] w-auto mb-8"
+            priority
+          />
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -64,10 +71,6 @@ export default function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
           </form>
-
-          <p className="text-center text-sm text-gray-600 mt-6">
-            Não tem conta? <a href="/register" className="text-[#00C896] hover:underline">Cadastre-se</a>
-          </p>
         </div>
       </div>
     </div>

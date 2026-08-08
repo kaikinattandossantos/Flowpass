@@ -1,21 +1,31 @@
 import { FastifyInstance } from 'fastify'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
+import { getSocketIo } from '../lib/socket'
+import { getJwtUser, requireEventInCompany, requireRoles } from '../lib/auth'
+import { validateFormData } from '../utils/validate-form-data'
 import { prisma } from '../../../database'
-import crypto from 'crypto'
-import { io } from '../server'
-import { generateQRCode } from '../utils/qr'
-import { sendConfirmationEmail, sendWhatsAppMessage } from '../services/communication'
+import {
+  createRegistrationRecord,
+  DuplicateParticipantError
+} from '../services/registration-create'
+import { getPrimaryRegistrationForm } from '../services/registration-form'
+import { parseStructuralConfig } from '../utils/structural-config'
+import {
+  resolveStructuralValues,
+  validateCpfWhenEnabled,
+  validateResolvedStructuralValues
+} from '../utils/resolve-structural-values'
+import { formatParticipant } from '../utils/participant'
 
 export async function registrationRoutes(app: FastifyInstance) {
-  // Public registration
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/registrations', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
       body: z.object({
-        category_id: z.string().uuid(),
+        category_id: z.string().uuid().optional(),
         name: z.string(),
-        email: z.string().email(),
+        email: z.string().email().optional(),
         phone: z.string().optional(),
         form_data: z.record(z.string(), z.any())
       })
@@ -24,68 +34,95 @@ export async function registrationRoutes(app: FastifyInstance) {
     const { id: event_id } = request.params
     const data = request.body
 
-    // Generate QR token
-    const timestamp = Date.now()
-    const expiresAt = new Date(timestamp + 30 * 24 * 60 * 60 * 1000) // 30 days
-    const secret = process.env.QR_HMAC_SECRET || 'flowpass-qr-secret'
-    
-    const registration = await prisma.registration.create({
-      data: {
-        event_id,
-        ...data,
-        qr_token_expires_at: expiresAt,
-        status: 'confirmed'
-      }
-    })
-
-    const qrToken = crypto.createHmac('sha256', secret)
-      .update(`${registration.id}:${event_id}:${timestamp}`)
-      .digest('hex')
-
-    await prisma.registration.update({
-      where: { id: registration.id },
-      data: { qr_token: qrToken }
-    })
-
-    // Background tasks for communication
-    const event = await prisma.event.findUnique({
-      where: { id: event_id },
-      include: { company: true }
-    })
-
-    const qrCodeDataUrl = await generateQRCode(qrToken)
-
-    if (event) {
-      sendConfirmationEmail({
-        email: data.email,
-        name: data.name,
-        eventName: event.name,
-        qrCodeUrl: qrCodeDataUrl,
-        companyName: event.company.name
-      })
-
-      if (data.phone) {
-        sendWhatsAppMessage({
-          phone: data.phone,
-          name: data.name,
-          eventName: event.name,
-          qrCodeUrl: qrCodeDataUrl
-        })
-      }
+    const primaryForm = await getPrimaryRegistrationForm(event_id)
+    if (!primaryForm) {
+      return reply.status(404).send({ message: 'Formulário não encontrado para este evento' })
     }
 
-    return { ...registration, qr_token: qrToken }
+    const structuralConfig = parseStructuralConfig(primaryForm.structural_config)
+
+    const formFields = await prisma.formField.findMany({
+      where: { registration_form_id: primaryForm.id },
+      orderBy: { order: 'asc' }
+    })
+
+    const formValidation = validateFormData(formFields, data.form_data ?? {})
+    if (!formValidation.ok) {
+      return reply.status(400).send({ message: formValidation.message })
+    }
+
+    let categoryId: string | null = null
+    if (structuralConfig.category.enabled && data.category_id) {
+      const category = await prisma.category.findFirst({
+        where: { id: data.category_id, event_id }
+      })
+      if (!category) {
+        return reply.status(400).send({ message: 'Categoria inválida' })
+      }
+      categoryId = category.id
+    }
+
+    const resolved = resolveStructuralValues(structuralConfig, {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      cpf: undefined,
+      category_id: categoryId
+    })
+
+    const structuralValidation = validateResolvedStructuralValues(structuralConfig, resolved)
+    if (!structuralValidation.ok) {
+      return reply.status(400).send({ message: structuralValidation.message })
+    }
+
+    try {
+      const created = await createRegistrationRecord({
+        event_id,
+        registration_form_id: primaryForm.id,
+        category_id: resolved.category_id,
+        name: resolved.name,
+        email: resolved.email,
+        phone: resolved.phone,
+        form_data: formValidation.data,
+        origin: 'PUBLIC_FORM',
+        status: 'confirmed',
+        sendNotifications: true,
+        formFields
+      })
+      return formatParticipant(created)
+    } catch (err) {
+      if (err instanceof DuplicateParticipantError) {
+        return reply.status(409).send({ message: err.message })
+      }
+      if (err instanceof Error && err.message === 'Evento não encontrado') {
+        return reply.status(404).send({ message: err.message })
+      }
+      if (err instanceof Error && err.message.includes('Categoria')) {
+        return reply.status(400).send({ message: err.message })
+      }
+      throw err
+    }
   })
 
-  // Sync offline for operators
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id/sync', {
-    preHandler: [async (request) => await request.jwtVerify()],
+    preHandler: [requireRoles('admin', 'operator')],
     schema: {
       params: z.object({ id: z.string().uuid() })
     }
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id: event_id } = request.params
-    
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
+
+    if (ctx.user.role === 'operator') {
+      const assigned = await prisma.operator.findFirst({
+        where: { event_id, user_id: ctx.user.sub, active: true }
+      })
+      if (!assigned) {
+        return reply.status(403).send({ message: 'Operador não vinculado a este evento' })
+      }
+    }
+
     const registrations = await prisma.registration.findMany({
       where: { event_id, status: 'confirmed' },
       select: {
@@ -95,16 +132,15 @@ export async function registrationRoutes(app: FastifyInstance) {
       }
     })
 
-    return registrations.map((r: any) => ({
+    return registrations.map((r) => ({
       t: r.qr_token,
       n: r.name,
-      c: r.category.name
+      c: r.category?.name ?? ''
     }))
   })
 
-  // Batch check-in sync
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/checkins', {
-    preHandler: [async (request) => await request.jwtVerify()],
+    preHandler: [requireRoles('admin', 'operator')],
     schema: {
       params: z.object({ id: z.string().uuid() }),
       body: z.array(z.object({
@@ -114,16 +150,28 @@ export async function registrationRoutes(app: FastifyInstance) {
         device_id: z.string().optional()
       }))
     }
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id: event_id } = request.params
-    const { sub: operator_id } = request.user as { sub: string }
-    const checkins = request.body
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
 
+    let operatorId: string | null = null
+    if (ctx.user.role === 'operator') {
+      const operator = await prisma.operator.findFirst({
+        where: { event_id, user_id: ctx.user.sub, active: true }
+      })
+      if (!operator) {
+        return reply.status(403).send({ message: 'Operador não vinculado a este evento' })
+      }
+      operatorId = operator.id
+    }
+
+    const checkins = request.body
     const results = []
 
     for (const checkin of checkins) {
-      const registration = await prisma.registration.findUnique({
-        where: { qr_token: checkin.qr_token },
+      const registration = await prisma.registration.findFirst({
+        where: { qr_token: checkin.qr_token, event_id },
         include: { category: true }
       })
 
@@ -137,7 +185,7 @@ export async function registrationRoutes(app: FastifyInstance) {
         const newCheckin = await prisma.checkIn.create({
           data: {
             registration_id: registration.id,
-            operator_id,
+            operator_id: operatorId,
             device_id: checkin.device_id,
             checked_at: new Date(checkin.checked_at),
             uuid: checkin.uuid,
@@ -145,13 +193,13 @@ export async function registrationRoutes(app: FastifyInstance) {
           }
         })
 
-        // Notify real-time dashboard
-        io.of(`/events/${event_id}`).emit('checkin', {
+        const socketIo = getSocketIo()
+        socketIo?.of(`/events/${event_id}`).emit('checkin', {
           registration_id: registration.id,
           name: registration.name,
-          category: registration.category.name,
+          category: registration.category?.name ?? '',
           checked_at: newCheckin.checked_at,
-          operator_name: 'Operator' // Ideally fetch operator name
+          operator_name: 'Operator'
         })
 
         results.push(newCheckin)
