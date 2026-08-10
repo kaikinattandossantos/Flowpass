@@ -5,15 +5,24 @@ import { prisma } from '../../../database'
 import { validateFormData } from '../utils/validate-form-data'
 import {
   createRegistrationRecord,
-  DuplicateParticipantError
+  DuplicateParticipantError,
+  RegistrationLimitError
 } from '../services/registration-create'
 import { formatParticipant } from '../utils/participant'
+import {
+  parseFieldLayout,
+  resolveUnifiedFields
+} from '../utils/field-layout'
 import { parseStructuralConfig } from '../utils/structural-config'
 import {
   resolveStructuralValues,
   validateCpfWhenEnabled,
   validateResolvedStructuralValues
 } from '../utils/resolve-structural-values'
+import {
+  countActiveRegistrationsForForm,
+  getRegistrationFormAvailability
+} from '../utils/registration-form-limit'
 
 export async function publicFormRoutes(app: FastifyInstance) {
   app.withTypeProvider<ZodTypeProvider>().get('/public/forms/:publicId', {
@@ -32,6 +41,10 @@ export async function publicFormRoutes(app: FastifyInstance) {
     }
 
     const structuralConfig = parseStructuralConfig(form.structural_config)
+    const fieldLayout = parseFieldLayout(form.field_layout, structuralConfig, form.form_fields)
+    const unifiedFields = resolveUnifiedFields(structuralConfig, form.form_fields, fieldLayout)
+    const activeCount = await countActiveRegistrationsForForm(prisma, form.id)
+    const availability = await getRegistrationFormAvailability(form, form.id, activeCount)
 
     return {
       event: {
@@ -48,8 +61,13 @@ export async function publicFormRoutes(app: FastifyInstance) {
         name: form.name,
         status: form.status,
         public_id: form.public_id,
-        structural_config: structuralConfig
+        structural_config: structuralConfig,
+        field_layout: fieldLayout,
+        redirect_url: form.redirect_url,
+        registration_limit: form.registration_limit,
+        active_registration_count: activeCount
       },
+      unified_fields: unifiedFields,
       categories: form.event.categories.map((c) => ({
         id: c.id,
         name: c.name,
@@ -65,10 +83,9 @@ export async function publicFormRoutes(app: FastifyInstance) {
         options: Array.isArray(field.options) ? field.options : null,
         order: field.order
       })),
-      can_submit:
-        form.status === 'active'
-        && form.event.status === 'active'
-        && form.event.company.status === 'active'
+      can_submit: availability.can_submit,
+      block_reason: availability.block_reason ?? null,
+      block_message: availability.message ?? null
     }
   })
 
@@ -97,16 +114,10 @@ export async function publicFormRoutes(app: FastifyInstance) {
       return reply.status(404).send({ message: 'Formulário não encontrado' })
     }
 
-    if (form.status !== 'active') {
-      return reply.status(403).send({ message: 'Formulário inativo' })
-    }
-
-    if (form.event.status !== 'active') {
-      return reply.status(403).send({ message: 'Evento não está aceitando inscrições' })
-    }
-
-    if (form.event.company.status !== 'active') {
-      return reply.status(403).send({ message: 'Empresa inativa' })
+    const activeCount = await countActiveRegistrationsForForm(prisma, form.id)
+    const availability = await getRegistrationFormAvailability(form, form.id, activeCount)
+    if (!availability.can_submit) {
+      return reply.status(403).send({ message: availability.message ?? 'Formulário indisponível' })
     }
 
     const structuralConfig = parseStructuralConfig(form.structural_config)
@@ -143,7 +154,8 @@ export async function publicFormRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: structuralValidation.message })
     }
 
-    const formValidation = validateFormData(form.form_fields, data.form_data ?? {})
+    const activeFormFields = form.form_fields.filter((field) => field.enabled !== false)
+    const formValidation = validateFormData(activeFormFields, data.form_data ?? {})
     if (!formValidation.ok) {
       return reply.status(400).send({ message: formValidation.message })
     }
@@ -167,10 +179,16 @@ export async function publicFormRoutes(app: FastifyInstance) {
         sendNotifications: true,
         formFields: form.form_fields
       })
-      return formatParticipant(created)
+      return {
+        participant: formatParticipant(created),
+        redirect_url: form.redirect_url
+      }
     } catch (err) {
       if (err instanceof DuplicateParticipantError) {
         return reply.status(409).send({ message: err.message })
+      }
+      if (err instanceof RegistrationLimitError) {
+        return reply.status(403).send({ message: err.message })
       }
       if (err instanceof Error && err.message === 'Evento não encontrado') {
         return reply.status(404).send({ message: err.message })

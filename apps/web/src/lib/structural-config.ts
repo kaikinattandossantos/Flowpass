@@ -3,6 +3,7 @@ export type StructuralFieldKey = 'name' | 'email' | 'phone' | 'cpf' | 'category'
 export interface StructuralFieldConfig {
   enabled: boolean
   required: boolean
+  label?: string
 }
 
 export type StructuralConfig = Record<StructuralFieldKey, StructuralFieldConfig>
@@ -33,7 +34,10 @@ export function parseStructuralConfig(raw: unknown): StructuralConfig {
     if (!value || typeof value !== 'object') continue
     result[key] = {
       enabled: value.enabled ?? result[key].enabled,
-      required: value.required ?? result[key].required
+      required: value.required ?? result[key].required,
+      ...(value.label !== undefined && value.label.trim()
+        ? { label: value.label.trim() }
+        : {})
     }
   }
 
@@ -43,8 +47,21 @@ export function parseStructuralConfig(raw: unknown): StructuralConfig {
   return result
 }
 
+export function getStructuralFieldLabel(key: StructuralFieldKey, config: StructuralConfig): string {
+  const custom = config[key].label?.trim()
+  return custom || STRUCTURAL_FIELD_LABELS[key]
+}
+
 export function buildStructuralColumns(config: StructuralConfig): string[] {
   return (Object.keys(config) as StructuralFieldKey[])
     .filter((key) => config[key].enabled)
-    .map((key) => STRUCTURAL_FIELD_LABELS[key])
+    .map((key) => getStructuralFieldLabel(key, config))
+}
+
+export type RegistrationFormStatus = 'draft' | 'active' | 'inactive'
+
+export function formStatusLabel(status: RegistrationFormStatus): string {
+  if (status === 'draft') return 'Rascunho'
+  if (status === 'active') return 'Publicado'
+  return 'Inativo'
 }

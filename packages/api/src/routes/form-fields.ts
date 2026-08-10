@@ -24,6 +24,7 @@ const fieldBodySchema = z.object({
   label: z.string().min(1).max(200),
   type: z.enum([...BUILDER_FIELD_TYPES] as [BuilderFieldType, ...BuilderFieldType[]]),
   required: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   placeholder: z.string().max(200).optional(),
   options: z.array(z.string()).optional(),
   order: z.number().int().min(0).optional()
@@ -33,6 +34,7 @@ const fieldPatchSchema = z.object({
   label: z.string().min(1).max(200).optional(),
   type: z.enum([...BUILDER_FIELD_TYPES] as [BuilderFieldType, ...BuilderFieldType[]]).optional(),
   required: z.boolean().optional(),
+  enabled: z.boolean().optional(),
   placeholder: z.string().max(200).nullable().optional(),
   options: z.array(z.string()).optional(),
   order: z.number().int().min(0).optional()
@@ -61,6 +63,7 @@ function serializeField(field: {
   label: string
   type: FieldType
   required: boolean
+  enabled: boolean
   placeholder: string | null
   options: unknown
   order: number
@@ -71,6 +74,7 @@ function serializeField(field: {
     label: field.label,
     type: field.type,
     required: field.required,
+    enabled: field.enabled,
     placeholder: field.placeholder,
     options: Array.isArray(field.options) ? field.options : null,
     order: field.order
@@ -103,7 +107,7 @@ export async function formFieldRoutes(app: FastifyInstance) {
     const context = await requireFormContext(request, reply)
     if (!context) return
 
-    const { label, type, required, placeholder, options, order } = request.body
+    const { label, type, required, enabled, placeholder, options, order } = request.body
     const fieldType = type as FieldType
 
     if (!assertFieldTypeAllowed(fieldType)) {
@@ -126,6 +130,7 @@ export async function formFieldRoutes(app: FastifyInstance) {
         label: label.trim(),
         type: fieldType,
         required,
+        enabled,
         placeholder: placeholder?.trim() || null,
         options: optionsForStorage(fieldType, options) ?? Prisma.JsonNull,
         order: order ?? (maxOrder._max.order ?? -1) + 1
@@ -216,6 +221,7 @@ export async function formFieldRoutes(app: FastifyInstance) {
         ...(request.body.label !== undefined && { label: request.body.label.trim() }),
         ...(request.body.type !== undefined && { type: nextType }),
         ...(request.body.required !== undefined && { required: request.body.required }),
+        ...(request.body.enabled !== undefined && { enabled: request.body.enabled }),
         ...(request.body.placeholder !== undefined && {
           placeholder: request.body.placeholder?.trim() || null
         }),

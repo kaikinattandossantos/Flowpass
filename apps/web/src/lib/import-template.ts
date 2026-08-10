@@ -1,17 +1,14 @@
 import * as XLSX from 'xlsx'
-import { FormField, sortFormFields } from '@/lib/form-field-types'
-import { buildStructuralColumns, type StructuralConfig } from '@/lib/structural-config'
+import { FormField } from '@/lib/form-field-types'
+import { buildTemplateColumnsFromLayout, FormLayoutEntry } from '@/lib/field-layout'
+import { getStructuralFieldLabel, type StructuralConfig, type StructuralFieldKey } from '@/lib/structural-config'
 
 export function buildTemplateColumns(
   structuralConfig: StructuralConfig,
-  formFields: FormField[]
+  formFields: FormField[],
+  fieldLayout: FormLayoutEntry[]
 ): string[] {
-  const structural = buildStructuralColumns(structuralConfig)
-  const dynamic = sortFormFields(formFields)
-    .filter((field) => !['email', 'phone', 'cpf'].includes(field.type))
-    .map((field) => field.label)
-
-  return [...structural, ...dynamic]
+  return buildTemplateColumnsFromLayout(structuralConfig, formFields, fieldLayout)
 }
 
 export function slugifyFormName(name: string): string {
@@ -24,21 +21,33 @@ export function slugifyFormName(name: string): string {
     .slice(0, 40) || 'formulario'
 }
 
+function exampleValueForColumn(
+  column: string,
+  structuralConfig: StructuralConfig
+): string {
+  const structuralEntries = (Object.keys(structuralConfig) as StructuralFieldKey[])
+    .map((key) => ({ key, label: getStructuralFieldLabel(key, structuralConfig) }))
+
+  const match = structuralEntries.find((entry) => entry.label === column)
+  if (match?.key === 'name') return 'Maria Silva'
+  if (match?.key === 'email') return 'maria@email.com'
+  if (match?.key === 'phone') return '81999999999'
+  if (match?.key === 'cpf') return '529.982.247-25'
+  if (match?.key === 'category') return 'Público Geral'
+  return ''
+}
+
 export function downloadParticipantTemplate(
   formName: string,
   structuralConfig: StructuralConfig,
-  formFields: FormField[]
+  formFields: FormField[],
+  fieldLayout: FormLayoutEntry[]
 ) {
-  const columns = buildTemplateColumns(structuralConfig, formFields)
+  const columns = buildTemplateColumns(structuralConfig, formFields, fieldLayout)
   const exampleRow: Record<string, string> = {}
 
   for (const col of columns) {
-    if (col === 'Nome') exampleRow[col] = 'Maria Silva'
-    else if (col === 'E-mail') exampleRow[col] = 'maria@email.com'
-    else if (col === 'Telefone') exampleRow[col] = '81999999999'
-    else if (col === 'CPF') exampleRow[col] = '529.982.247-25'
-    else if (col === 'Categoria') exampleRow[col] = 'Público Geral'
-    else exampleRow[col] = ''
+    exampleRow[col] = exampleValueForColumn(col, structuralConfig)
   }
 
   const sheet = XLSX.utils.json_to_sheet([exampleRow], { header: columns })

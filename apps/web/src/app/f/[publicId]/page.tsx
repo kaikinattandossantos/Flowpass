@@ -5,13 +5,9 @@ import { useParams } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { API_URL } from '@/lib/api'
-import { FormField, sortFormFields } from '@/lib/form-field-types'
-import {
-  parseStructuralConfig,
-  STRUCTURAL_FIELD_LABELS,
-  type StructuralConfig,
-  type StructuralFieldKey
-} from '@/lib/structural-config'
+import { FormField, fieldTypeLabel } from '@/lib/form-field-types'
+import { UnifiedFormField } from '@/lib/field-layout'
+import { parseStructuralConfig, type StructuralConfig } from '@/lib/structural-config'
 import { DynamicFormFields } from '@/components/form-builder/DynamicFormFields'
 
 interface PublicFormData {
@@ -27,10 +23,37 @@ interface PublicFormData {
     name: string
     status: string
     structural_config: StructuralConfig
+    redirect_url: string | null
   }
   categories: Array<{ id: string; name: string }>
+  unified_fields: UnifiedFormField[]
   form_fields: FormField[]
   can_submit: boolean
+  block_reason: string | null
+  block_message: string | null
+}
+
+function CustomFieldBlock({
+  field,
+  formFields,
+  formData,
+  onChange
+}: {
+  field: Extract<UnifiedFormField, { kind: 'custom' }>
+  formFields: FormField[]
+  formData: Record<string, string | string[] | boolean>
+  onChange: (fieldId: string, value: string | string[] | boolean) => void
+}) {
+  const fullField = formFields.find((item) => item.id === field.id)
+  if (!fullField) return null
+
+  return (
+    <DynamicFormFields
+      fields={[fullField]}
+      values={formData}
+      onChange={onChange}
+    />
+  )
 }
 
 export default function PublicFormPage() {
@@ -72,7 +95,7 @@ export default function PublicFormPage() {
     setApiError(null)
     try {
       const config = parseStructuralConfig(data.form.structural_config)
-      await axios.post(`${API_URL}/public/forms/${publicId}/registrations`, {
+      const res = await axios.post(`${API_URL}/public/forms/${publicId}/registrations`, {
         category_id: config.category.enabled ? selectedCategory : undefined,
         name: baseInfo.name,
         email: config.email.enabled ? baseInfo.email : undefined,
@@ -80,6 +103,13 @@ export default function PublicFormPage() {
         cpf: config.cpf.enabled ? baseInfo.cpf || undefined : undefined,
         form_data: formData
       })
+
+      const redirectUrl = res.data.redirect_url as string | null
+      if (redirectUrl) {
+        window.location.href = redirectUrl
+        return
+      }
+
       setSuccess(true)
     } catch (err: unknown) {
       const message = axios.isAxiosError(err)
@@ -95,9 +125,6 @@ export default function PublicFormPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>
   if (!data) return <div className="min-h-screen flex items-center justify-center">Formulário não encontrado</div>
 
-  const structuralConfig = parseStructuralConfig(data.form.structural_config)
-  const dynamicFields = sortFormFields(data.form_fields)
-
   if (success) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -109,15 +136,24 @@ export default function PublicFormPage() {
     )
   }
 
-  const renderStructuralField = (key: StructuralFieldKey) => {
-    const field = structuralConfig[key]
-    if (!field.enabled) return null
-    const label = STRUCTURAL_FIELD_LABELS[key]
-    const required = field.required
+  const renderUnifiedField = (field: UnifiedFormField) => {
+    if (field.kind === 'custom') {
+      return (
+        <CustomFieldBlock
+          key={field.id}
+          field={field}
+          formFields={data.form_fields}
+          formData={formData}
+          onChange={(fieldId, value) => setFormData((prev) => ({ ...prev, [fieldId]: value }))}
+        />
+      )
+    }
+
+    const { key, label, required } = field
 
     if (key === 'category') {
       return (
-        <div key={key} className="md:col-span-2">
+        <div key={key}>
           <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
           <select
             value={selectedCategory}
@@ -137,8 +173,10 @@ export default function PublicFormPage() {
     const valueKey = key as 'name' | 'email' | 'phone' | 'cpf'
 
     return (
-      <div key={key} className={key === 'name' ? 'md:col-span-2' : ''}>
-        <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div key={key}>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
         <input
           type={inputType}
           required={required}
@@ -146,6 +184,7 @@ export default function PublicFormPage() {
           onChange={(e) => setBaseInfo({ ...baseInfo, [valueKey]: e.target.value })}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
         />
+        <p className="text-xs text-gray-400 mt-1">{fieldTypeLabel(key === 'cpf' ? 'cpf' : key === 'email' ? 'email' : key === 'phone' ? 'phone' : 'text')}</p>
       </div>
     )
   }
@@ -166,7 +205,8 @@ export default function PublicFormPage() {
         {!data.can_submit && (
           <div className="p-8">
             <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
-              Este formulário não está aceitando inscrições no momento.
+              <p className="font-semibold">Inscrições encerradas</p>
+              <p>{data.block_message ?? 'Este formulário não está aceitando inscrições no momento.'}</p>
             </div>
           </div>
         )}
@@ -179,19 +219,9 @@ export default function PublicFormPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {(Object.keys(structuralConfig) as StructuralFieldKey[]).map(renderStructuralField)}
+            <div className="space-y-6">
+              {data.unified_fields.map(renderUnifiedField)}
             </div>
-
-            {dynamicFields.length > 0 && (
-              <div className="border-t pt-6 space-y-6">
-                <DynamicFormFields
-                  fields={dynamicFields}
-                  values={formData}
-                  onChange={(fieldId, value) => setFormData((prev) => ({ ...prev, [fieldId]: value }))}
-                />
-              </div>
-            )}
 
             <button
               type="submit"

@@ -12,6 +12,8 @@ import {
   type StructuralFieldKey
 } from '../utils/structural-config'
 import { findDuplicateRegistration, normalizeImportCpf } from './registration-create'
+import { parseFieldLayout, getStructuralFieldLabel } from '../utils/field-layout'
+import { countActiveRegistrationsForForm } from '../utils/registration-form-limit'
 
 export interface ImportMapping {
   name?: string
@@ -38,12 +40,19 @@ export interface ImportPreviewResult {
   duplicates: number
   problems: ImportRowProblem[]
   ready_row_indexes: number[]
+  capacity_limit?: number | null
+  capacity_used?: number
+  capacity_available?: number | null
 }
 
 export interface ImportFormContext {
+  registrationFormId: string
+  registrationLimit: number | null
+  activeRegistrationCount: number
   structuralConfig: StructuralConfig
   formFields: FormField[]
   categories: Category[]
+  fieldLayout: import('../utils/field-layout').FormLayoutEntry[]
 }
 
 export async function loadImportFormContext(
@@ -60,10 +69,18 @@ export async function loadImportFormContext(
 
   if (!form) return null
 
+  const structuralConfig = parseStructuralConfig(form.structural_config)
+  const fieldLayout = parseFieldLayout(form.field_layout, structuralConfig, form.form_fields)
+  const activeRegistrationCount = await countActiveRegistrationsForForm(prisma, registrationFormId)
+
   return {
-    structuralConfig: parseStructuralConfig(form.structural_config),
+    registrationFormId,
+    registrationLimit: form.registration_limit,
+    activeRegistrationCount,
+    structuralConfig,
     formFields: form.form_fields,
-    categories: form.event.categories
+    categories: form.event.categories,
+    fieldLayout
   }
 }
 
@@ -82,6 +99,9 @@ export async function previewImportRows(
   const readyRowIndexes: number[] = []
   const seenEmails = new Set<string>()
   const seenCpfs = new Set<string>()
+  let remainingSlots = formContext.registrationLimit !== null
+    ? Math.max(0, formContext.registrationLimit - formContext.activeRegistrationCount)
+    : null
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
@@ -98,7 +118,18 @@ export async function previewImportRows(
     })
 
     if (result.ok) {
+      if (remainingSlots !== null && remainingSlots <= 0) {
+        problems.push({
+          row: rowNum,
+          participant: result.participant,
+          reason: 'Limite de inscrições do formulário atingido',
+          type: 'error'
+        })
+        continue
+      }
+
       readyRowIndexes.push(i)
+      if (remainingSlots !== null) remainingSlots--
       if (result.emailKey) seenEmails.add(result.emailKey)
       if (result.cpfKey) seenCpfs.add(result.cpfKey)
     } else {
@@ -111,13 +142,20 @@ export async function previewImportRows(
     }
   }
 
+  const capacityAvailable = formContext.registrationLimit !== null
+    ? Math.max(0, formContext.registrationLimit - formContext.activeRegistrationCount)
+    : null
+
   return {
     total: rows.length,
     ready: readyRowIndexes.length,
     errors: problems.filter((p) => p.type === 'error').length,
     duplicates: problems.filter((p) => p.type === 'duplicate').length,
     problems,
-    ready_row_indexes: readyRowIndexes
+    ready_row_indexes: readyRowIndexes,
+    capacity_limit: formContext.registrationLimit,
+    capacity_used: formContext.activeRegistrationCount,
+    capacity_available: capacityAvailable
   }
 }
 
@@ -145,6 +183,9 @@ export async function executeImportRows(
 
   const seenEmails = new Set<string>()
   const seenCpfs = new Set<string>()
+  let remainingSlots = formContext.registrationLimit !== null
+    ? Math.max(0, formContext.registrationLimit - formContext.activeRegistrationCount)
+    : null
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
@@ -172,9 +213,20 @@ export async function executeImportRows(
       continue
     }
 
+    if (remainingSlots !== null && remainingSlots <= 0) {
+      report.skipped++
+      report.errors.push({
+        row: rowNum,
+        reason: 'Limite de inscrições do formulário atingido',
+        participant: result.participant
+      })
+      continue
+    }
+
     try {
       await createRow(result.data)
       report.imported++
+      if (remainingSlots !== null) remainingSlots--
       if (result.emailKey) seenEmails.add(result.emailKey)
       if (result.cpfKey) seenCpfs.add(result.cpfKey)
     } catch (err) {
@@ -313,6 +365,9 @@ async function validateImportRow(params: {
   }
 }
 
-export function structuralFieldLabel(key: StructuralFieldKey): string {
-  return STRUCTURAL_FIELD_LABELS[key]
+export function structuralFieldLabel(
+  key: StructuralFieldKey,
+  config: StructuralConfig
+): string {
+  return getStructuralFieldLabel(key, config)
 }

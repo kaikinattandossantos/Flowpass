@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { API_URL, authHeaders } from '@/lib/api'
 import { canManageEvents, getStoredUser } from '@/store/auth'
 import { publicFormUrl, type RegistrationFormSummary } from '@/lib/registration-form-types'
+import { formStatusLabel } from '@/lib/structural-config'
 
 export default function EventFormsPage() {
   const params = useParams()
@@ -86,15 +87,27 @@ export default function EventFormsPage() {
 
   const handleToggleStatus = async (form: RegistrationFormSummary) => {
     try {
-      await axios.patch(
-        `${API_URL}/events/${eventId}/registration-forms/${form.id}`,
-        { status: form.status === 'active' ? 'inactive' : 'active' },
-        { headers: authHeaders() }
-      )
-      toast.success(form.status === 'active' ? 'Formulário desativado' : 'Formulário ativado')
+      if (form.status === 'draft') {
+        await axios.post(
+          `${API_URL}/events/${eventId}/registration-forms/${form.id}/publish`,
+          {},
+          { headers: authHeaders() }
+        )
+        toast.success('Formulário publicado')
+      } else {
+        await axios.patch(
+          `${API_URL}/events/${eventId}/registration-forms/${form.id}`,
+          { status: form.status === 'active' ? 'inactive' : 'active' },
+          { headers: authHeaders() }
+        )
+        toast.success(form.status === 'active' ? 'Formulário desativado' : 'Formulário ativado')
+      }
       await load()
-    } catch {
-      toast.error('Erro ao atualizar formulário')
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.message ?? 'Erro ao atualizar formulário'
+        : 'Erro ao atualizar formulário'
+      toast.error(message)
     }
   }
 
@@ -167,8 +180,14 @@ export default function EventFormsPage() {
                     <h2 className="text-lg font-semibold text-[#0B1F3A]">{form.name}</h2>
                     <p className="text-sm text-gray-600 mt-1">
                       {form.field_count} campos · {form.response_count} respostas ·{' '}
-                      <span className={form.status === 'active' ? 'text-green-700' : 'text-gray-500'}>
-                        {form.status === 'active' ? 'Ativo' : 'Inativo'}
+                      <span className={
+                        form.status === 'active'
+                          ? 'text-green-700'
+                          : form.status === 'draft'
+                            ? 'text-amber-700'
+                            : 'text-gray-500'
+                      }>
+                        {formStatusLabel(form.status)}
                       </span>
                     </p>
                   </div>
@@ -191,7 +210,7 @@ export default function EventFormsPage() {
                           onClick={() => void handleToggleStatus(form)}
                           className="px-3 py-1.5 border rounded-lg text-sm text-gray-600"
                         >
-                          {form.status === 'active' ? 'Desativar' : 'Ativar'}
+                          {form.status === 'active' ? 'Desativar' : form.status === 'draft' ? 'Publicar' : 'Ativar'}
                         </button>
                       </>
                     )}

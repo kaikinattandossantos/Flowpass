@@ -137,6 +137,14 @@ describe('structural fields integration', { skip: !dbReady }, () => {
     formNameCpfId = nameCpf.id
     publicNameCpfId = nameCpf.public_id
 
+    for (const formId of [formRequiredEmailId, formOptionalEmailId, formNoEmailId, formNameCpfId]) {
+      await app.inject({
+        method: 'POST',
+        url: `/events/${eventId}/registration-forms/${formId}/publish`,
+        headers: { authorization: `Bearer ${adminToken}` }
+      })
+    }
+
     await prisma.registration.create({
       data: {
         event_id: eventId,
@@ -188,7 +196,7 @@ describe('structural fields integration', { skip: !dbReady }, () => {
       }
     })
     assert.equal(res.statusCode, 200)
-    assert.equal(res.json().email, 'required.email@test.com')
+    assert.equal(res.json().participant.email, 'required.email@test.com')
   })
 
   it('accepts public submission when email is optional and omitted', async () => {
@@ -198,7 +206,7 @@ describe('structural fields integration', { skip: !dbReady }, () => {
       payload: { name: 'Email Opcional', form_data: {} }
     })
     assert.equal(res.statusCode, 200)
-    assert.equal(res.json().email, null)
+    assert.equal(res.json().participant.email, null)
 
     const saved = await prisma.registration.findFirst({
       where: { event_id: eventId, name: 'Email Opcional' }
@@ -217,7 +225,7 @@ describe('structural fields integration', { skip: !dbReady }, () => {
       }
     })
     assert.equal(res.statusCode, 200)
-    assert.equal(res.json().email, null)
+    assert.equal(res.json().participant.email, null)
   })
 
   it('imports row without email when email is disabled', async () => {
@@ -257,8 +265,8 @@ describe('structural fields integration', { skip: !dbReady }, () => {
       }
     })
     assert.equal(res.statusCode, 200)
-    assert.equal(res.json().email, null)
-    assert.equal(res.json().cpf, '15350946056')
+    assert.equal(res.json().participant.email, null)
+    assert.equal(res.json().participant.cpf, '15350946056')
   })
 
   it('does not treat two null emails as duplicate', async () => {
@@ -275,7 +283,7 @@ describe('structural fields integration', { skip: !dbReady }, () => {
       payload: { name: 'Maria Sem Email', cpf: '10000000019', form_data: {} }
     })
     assert.equal(second.statusCode, 200)
-    assert.notEqual(first.json().id, second.json().id)
+    assert.notEqual(first.json().participant.id, second.json().participant.id)
   })
 
   it('still detects duplicate cpf', async () => {

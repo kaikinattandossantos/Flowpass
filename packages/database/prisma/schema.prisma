@@ -130,23 +130,27 @@ model AccessPointCategory {
 }
 
 model RegistrationForm {
-  id                String                 @id @default(uuid())
-  event_id          String
-  event             Event                  @relation(fields: [event_id], references: [id], onDelete: Cascade)
-  name              String
-  public_id         String                 @unique
-  status            RegistrationFormStatus @default(active)
-  structural_config Json
-  created_at        DateTime               @default(now())
-  updated_at        DateTime               @updatedAt
-  form_fields       FormField[]
-  registrations     Registration[]
+  id                  String                 @id @default(uuid())
+  event_id            String
+  event               Event                  @relation(fields: [event_id], references: [id], onDelete: Cascade)
+  name                String
+  public_id           String                 @unique
+  status              RegistrationFormStatus @default(draft)
+  structural_config   Json
+  field_layout        Json?
+  registration_limit  Int?
+  redirect_url        String?
+  created_at          DateTime               @default(now())
+  updated_at          DateTime               @updatedAt
+  form_fields         FormField[]
+  registrations       Registration[]
 
   @@index([event_id])
   @@map("registration_forms")
 }
 
 enum RegistrationFormStatus {
+  draft
   active
   inactive
 }
@@ -158,6 +162,7 @@ model FormField {
   label                String
   type                 FieldType
   required             Boolean          @default(false)
+  enabled              Boolean          @default(true)
   placeholder          String?
   options              Json?
   order                Int              @default(0)

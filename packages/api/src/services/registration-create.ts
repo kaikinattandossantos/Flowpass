@@ -10,6 +10,10 @@ import { generateQRCode } from '../utils/qr'
 import { sendConfirmationEmail, sendWhatsAppMessage } from './communication'
 import { resolveCpf } from '../utils/participant'
 import { normalizeCpf } from '../utils/cpf'
+import {
+  assertRegistrationFormCapacity,
+  RegistrationLimitError
+} from '../utils/registration-form-limit'
 
 export class DuplicateParticipantError extends Error {
   constructor(message = 'Participante já cadastrado neste evento') {
@@ -64,6 +68,8 @@ export interface CreateRegistrationInput {
   formFields?: FormField[]
 }
 
+export { RegistrationLimitError } from '../utils/registration-form-limit'
+
 export async function createRegistrationRecord(input: CreateRegistrationInput) {
   const {
     event_id,
@@ -111,52 +117,58 @@ export async function createRegistrationRecord(input: CreateRegistrationInput) {
     : resolveCpf(undefined, formFields ?? [], form_data)
   const normalizedEmail = email?.trim().toLowerCase() || null
 
-  if (!skipDuplicateCheck) {
-    const duplicate = await findDuplicateRegistration(event_id, normalizedEmail, cpf)
-    if (duplicate) {
-      throw new DuplicateParticipantError()
-    }
-  }
-
   const timestamp = Date.now()
   const expiresAt = new Date(timestamp + 30 * 24 * 60 * 60 * 1000)
   const secret = process.env.QR_HMAC_SECRET || 'flowpass-qr-secret'
 
-  const registration = await prisma.registration.create({
-    data: {
-      event_id,
-      registration_form_id: registration_form_id ?? null,
-      category_id: category_id ?? null,
-      name: name.trim(),
-      email: normalizedEmail,
-      phone: phone?.trim() || null,
-      cpf,
-      form_data: form_data as Prisma.InputJsonValue,
-      qr_token_expires_at: expiresAt,
-      status,
-      origin
-    },
-    include: {
-      category: { select: { id: true, name: true } },
-      registration_form: { select: { id: true, name: true } }
+  const updated = await prisma.$transaction(async (tx) => {
+    if (registration_form_id) {
+      await assertRegistrationFormCapacity(tx, registration_form_id)
     }
-  })
 
-  const qrToken = crypto.createHmac('sha256', secret)
-    .update(`${registration.id}:${event_id}:${timestamp}`)
-    .digest('hex')
-
-  const updated = await prisma.registration.update({
-    where: { id: registration.id },
-    data: { qr_token: qrToken },
-    include: {
-      category: { select: { id: true, name: true } },
-      registration_form: { select: { id: true, name: true } }
+    if (!skipDuplicateCheck) {
+      const duplicate = await findDuplicateRegistration(event_id, normalizedEmail, cpf)
+      if (duplicate) {
+        throw new DuplicateParticipantError()
+      }
     }
+
+    const registration = await tx.registration.create({
+      data: {
+        event_id,
+        registration_form_id: registration_form_id ?? null,
+        category_id: category_id ?? null,
+        name: name.trim(),
+        email: normalizedEmail,
+        phone: phone?.trim() || null,
+        cpf,
+        form_data: form_data as Prisma.InputJsonValue,
+        qr_token_expires_at: expiresAt,
+        status,
+        origin
+      },
+      include: {
+        category: { select: { id: true, name: true } },
+        registration_form: { select: { id: true, name: true } }
+      }
+    })
+
+    const qrToken = crypto.createHmac('sha256', secret)
+      .update(`${registration.id}:${event_id}:${timestamp}`)
+      .digest('hex')
+
+    return tx.registration.update({
+      where: { id: registration.id },
+      data: { qr_token: qrToken },
+      include: {
+        category: { select: { id: true, name: true } },
+        registration_form: { select: { id: true, name: true } }
+      }
+    })
   })
 
   if (sendNotifications) {
-    const qrCodeDataUrl = await generateQRCode(qrToken)
+    const qrCodeDataUrl = await generateQRCode(updated.qr_token!)
     if (updated.email) {
       sendConfirmationEmail({
         email: updated.email,
@@ -176,7 +188,7 @@ export async function createRegistrationRecord(input: CreateRegistrationInput) {
     }
   }
 
-  return { ...updated, qr_token: qrToken }
+  return updated
 }
 
 export async function getRegistrationQrImage(registrationId: string, eventId: string) {

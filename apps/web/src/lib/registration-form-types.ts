@@ -1,15 +1,22 @@
 import { StructuralConfig } from '@/lib/structural-config'
-import { FormField, sortFormFields } from '@/lib/form-field-types'
+import { FormField } from '@/lib/form-field-types'
+import { buildTemplateColumnsFromLayout, FormLayoutEntry } from '@/lib/field-layout'
 
 export interface RegistrationFormSummary {
   id: string
   event_id: string
   name: string
   public_id: string
-  status: 'active' | 'inactive'
+  status: 'draft' | 'active' | 'inactive'
   structural_config: StructuralConfig
+  field_layout: FormLayoutEntry[]
+  registration_limit: number | null
+  redirect_url: string | null
   field_count: number
   response_count: number
+  active_registration_count?: number
+  available_slots?: number | null
+  is_full?: boolean
 }
 
 export function publicFormUrl(publicId: string): string {
@@ -21,26 +28,8 @@ export function publicFormUrl(publicId: string): string {
 
 export function buildFormFieldColumns(
   structuralConfig: StructuralConfig,
-  formFields: FormField[]
+  formFields: FormField[],
+  fieldLayout: FormLayoutEntry[]
 ): string[] {
-  const structural = buildStructuralColumns(structuralConfig)
-  const dynamic = sortFormFields(formFields)
-    .filter((field) => !['email', 'phone', 'cpf'].includes(field.type))
-    .map((field) => field.label)
-
-  return [...structural, ...dynamic]
-}
-
-function buildStructuralColumns(config: StructuralConfig): string[] {
-  const labels: Record<string, string> = {
-    name: 'Nome',
-    email: 'E-mail',
-    phone: 'Telefone',
-    cpf: 'CPF',
-    category: 'Categoria'
-  }
-
-  return (Object.keys(config) as Array<keyof StructuralConfig>)
-    .filter((key) => config[key].enabled)
-    .map((key) => labels[key])
+  return buildTemplateColumnsFromLayout(structuralConfig, formFields, fieldLayout)
 }

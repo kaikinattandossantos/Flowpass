@@ -107,6 +107,34 @@ describe('registration-forms integration', { skip: !dbReady }, () => {
     })
     assert.equal(fieldRes.statusCode, 200)
     customFieldId = fieldRes.json().id
+
+    const category = await prisma.category.findFirst({ where: { event_id: eventAId } })
+    await app.inject({
+      method: 'PATCH',
+      url: `/events/${eventAId}/registration-forms/${formAId}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        structural_config: {
+          name: { enabled: true, required: true },
+          email: { enabled: true, required: true },
+          phone: { enabled: false, required: false },
+          cpf: { enabled: false, required: false },
+          category: { enabled: true, required: true }
+        },
+        field_layout: [
+          { kind: 'structural', key: 'name' },
+          { kind: 'structural', key: 'email' },
+          { kind: 'structural', key: 'category' },
+          { kind: 'custom', field_id: customFieldId }
+        ]
+      }
+    })
+
+    await app.inject({
+      method: 'POST',
+      url: `/events/${eventAId}/registration-forms/${formAId}/publish`,
+      headers: { authorization: `Bearer ${adminToken}` }
+    })
   })
 
   it('company A cannot list forms from company B event', async () => {

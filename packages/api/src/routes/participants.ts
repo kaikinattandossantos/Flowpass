@@ -10,7 +10,8 @@ import {
   createRegistrationRecord,
   DuplicateParticipantError,
   findDuplicateRegistration,
-  getRegistrationQrImage
+  getRegistrationQrImage,
+  RegistrationLimitError
 } from '../services/registration-create'
 import { getPrimaryRegistrationForm } from '../services/registration-form'
 import { parseStructuralConfig } from '../utils/structural-config'
@@ -209,6 +210,9 @@ export async function participantRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof DuplicateParticipantError) {
         return reply.status(409).send({ message: err.message })
+      }
+      if (err instanceof RegistrationLimitError) {
+        return reply.status(403).send({ message: err.message })
       }
       throw err
     }

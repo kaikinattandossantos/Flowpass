@@ -3,6 +3,7 @@ export type StructuralFieldKey = 'name' | 'email' | 'phone' | 'cpf' | 'category'
 export interface StructuralFieldConfig {
   enabled: boolean
   required: boolean
+  label?: string
 }
 
 export type StructuralConfig = Record<StructuralFieldKey, StructuralFieldConfig>
@@ -33,7 +34,10 @@ export function parseStructuralConfig(raw: unknown): StructuralConfig {
     if (!value || typeof value !== 'object') continue
     result[key] = {
       enabled: value.enabled ?? result[key].enabled,
-      required: value.required ?? result[key].required
+      required: value.required ?? result[key].required,
+      ...(value.label !== undefined && value.label.trim()
+        ? { label: value.label.trim() }
+        : {})
     }
   }
 
@@ -47,8 +51,13 @@ export function enabledStructuralFields(config: StructuralConfig): StructuralFie
   return (Object.keys(config) as StructuralFieldKey[]).filter((key) => config[key].enabled)
 }
 
+export function getStructuralFieldLabel(key: StructuralFieldKey, config: StructuralConfig): string {
+  const custom = config[key].label?.trim()
+  return custom || STRUCTURAL_FIELD_LABELS[key]
+}
+
 export function buildStructuralColumns(config: StructuralConfig): string[] {
-  return enabledStructuralFields(config).map((key) => STRUCTURAL_FIELD_LABELS[key])
+  return enabledStructuralFields(config).map((key) => getStructuralFieldLabel(key, config))
 }
 
 export function validateStructuralPayload(

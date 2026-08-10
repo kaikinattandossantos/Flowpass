@@ -17,6 +17,7 @@ export interface FormField {
   label: string
   type: FormFieldType
   required: boolean
+  enabled?: boolean
   placeholder?: string | null
   options?: string[] | null
   order: number

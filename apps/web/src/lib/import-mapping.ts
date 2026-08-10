@@ -1,10 +1,11 @@
 import { FormField } from '@/lib/form-field-types'
 import {
+  getStructuralFieldLabel,
   parseStructuralConfig,
-  STRUCTURAL_FIELD_LABELS,
   type StructuralConfig,
   type StructuralFieldKey
 } from '@/lib/structural-config'
+import { FormLayoutEntry, resolveUnifiedFields } from '@/lib/field-layout'
 
 export type MappingTarget =
   | 'ignore'
@@ -23,17 +24,37 @@ export interface MappingOption {
 
 export function buildMappingOptions(
   structuralConfig: StructuralConfig,
-  formFields: FormField[]
+  formFields: FormField[],
+  fieldLayout?: FormLayoutEntry[]
 ): MappingOption[] {
   const options: MappingOption[] = [
     { value: 'ignore', label: 'Ignorar esta coluna', group: 'Outros' }
   ]
 
+  if (fieldLayout) {
+    for (const field of resolveUnifiedFields(structuralConfig, formFields, fieldLayout)) {
+      if (field.kind === 'structural') {
+        options.push({
+          value: field.key,
+          label: field.label,
+          group: 'Estrutural'
+        })
+      } else {
+        options.push({
+          value: `field:${field.id}`,
+          label: field.label,
+          group: 'Personalizado'
+        })
+      }
+    }
+    return options
+  }
+
   for (const key of Object.keys(structuralConfig) as StructuralFieldKey[]) {
     if (!structuralConfig[key].enabled) continue
     options.push({
       value: key,
-      label: STRUCTURAL_FIELD_LABELS[key],
+      label: getStructuralFieldLabel(key, structuralConfig),
       group: 'Estrutural'
     })
   }

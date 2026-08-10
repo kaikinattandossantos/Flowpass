@@ -1,5 +1,9 @@
 import { Prisma, prisma } from '../../../database'
 import { generatePublicId } from '../utils/public-id'
+import {
+  initialNewFormFieldLayout,
+  initialNewFormStructuralConfig
+} from '../utils/field-layout'
 import { DEFAULT_STRUCTURAL_CONFIG } from '../utils/structural-config'
 
 export async function createDefaultRegistrationForm(
@@ -12,6 +16,9 @@ export async function createDefaultRegistrationForm(
       name,
       public_id: generatePublicId(),
       structural_config: DEFAULT_STRUCTURAL_CONFIG as unknown as Prisma.InputJsonValue,
+      field_layout: initialNewFormFieldLayout() as unknown as Prisma.InputJsonValue,
+      registration_limit: null,
+      redirect_url: null,
       status: 'active'
     }
   })

@@ -9,6 +9,7 @@ import { FormField } from '@/lib/form-field-types'
 import { parseStructuralConfig, type StructuralConfig } from '@/lib/structural-config'
 import { type RegistrationFormSummary } from '@/lib/registration-form-types'
 import { downloadParticipantTemplate } from '@/lib/import-template'
+import { parseFieldLayout, type FormLayoutEntry } from '@/lib/field-layout'
 import {
   buildMappingOptions,
   isMappingValid,
@@ -102,6 +103,7 @@ export function ImportModal({
   const [selectedForm, setSelectedForm] = useState<RegistrationFormSummary | null>(null)
   const [formFields, setFormFields] = useState<FormField[]>([])
   const [structuralConfig, setStructuralConfig] = useState<StructuralConfig | null>(null)
+  const [fieldLayout, setFieldLayout] = useState<FormLayoutEntry[]>([])
   const [loadingFormFields, setLoadingFormFields] = useState(false)
   const [headers, setHeaders] = useState<string[]>([])
   const [rows, setRows] = useState<Array<Record<string, string>>>([])
@@ -117,7 +119,7 @@ export function ImportModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const mappingOptions = structuralConfig
-    ? buildMappingOptions(structuralConfig, formFields)
+    ? buildMappingOptions(structuralConfig, formFields, fieldLayout)
     : []
 
   const reset = useCallback(() => {
@@ -125,6 +127,7 @@ export function ImportModal({
     setSelectedForm(null)
     setFormFields([])
     setStructuralConfig(null)
+    setFieldLayout([])
     setHeaders([])
     setRows([])
     setColumnMappings({})
@@ -146,14 +149,17 @@ export function ImportModal({
 
   const selectForm = async (form: RegistrationFormSummary) => {
     setSelectedForm(form)
-    setStructuralConfig(parseStructuralConfig(form.structural_config))
+    const config = parseStructuralConfig(form.structural_config)
+    setStructuralConfig(config)
     setLoadingFormFields(true)
     try {
       const res = await axios.get(
         `${API_URL}/events/${eventId}/registration-forms/${form.id}/form-fields`,
         { headers: authHeaders() }
       )
-      setFormFields(res.data)
+      const nextFields = res.data as FormField[]
+      setFormFields(nextFields)
+      setFieldLayout(parseFieldLayout(form.field_layout, config, nextFields))
     } catch {
       toast.error('Erro ao carregar campos do formulário')
     } finally {
@@ -359,7 +365,7 @@ export function ImportModal({
                 </p>
                 <button
                   type="button"
-                  onClick={() => downloadParticipantTemplate(selectedForm.name, structuralConfig, formFields)}
+                  onClick={() => downloadParticipantTemplate(selectedForm.name, structuralConfig, formFields, fieldLayout)}
                   className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg text-sm font-medium hover:bg-[#00C896]/5"
                 >
                   Baixar modelo de planilha
