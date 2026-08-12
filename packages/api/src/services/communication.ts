@@ -1,7 +1,35 @@
 import { Resend } from 'resend'
 import axios from 'axios'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let resendClient: Resend | null = null
+let resendWarningLogged = false
+
+function isUsableResendKey(key: string | undefined): key is string {
+  if (!key || key.trim() === '') return false
+  if (/placeholder|your-|re_\.\.\./i.test(key)) return false
+  if (!key.startsWith('re_')) return false
+  return true
+}
+
+function getResendClient(): Resend | null {
+  const key = process.env.RESEND_API_KEY
+
+  if (!isUsableResendKey(key)) {
+    if (!resendWarningLogged) {
+      console.warn(
+        '[communication] RESEND_API_KEY ausente ou placeholder — envio de e-mail desabilitado'
+      )
+      resendWarningLogged = true
+    }
+    return null
+  }
+
+  if (!resendClient) {
+    resendClient = new Resend(key)
+  }
+
+  return resendClient
+}
 
 export async function sendConfirmationEmail(data: {
   email: string,
@@ -10,10 +38,8 @@ export async function sendConfirmationEmail(data: {
   qrCodeUrl: string,
   companyName: string
 }) {
-  if (!process.env.RESEND_API_KEY) {
-    console.log(`[email:dev] Confirmação para ${data.email} - evento ${data.eventName}`)
-    return
-  }
+  const resend = getResendClient()
+  if (!resend) return
 
   try {
     await resend.emails.send({
@@ -38,50 +64,6 @@ export async function sendConfirmationEmail(data: {
   }
 }
 
-export async function sendAttendanceEmail(data: {
-  email: string
-  name: string
-  eventName: string
-  checkedAt: Date
-  companyName: string
-}) {
-  const formattedDate = data.checkedAt.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-
-  if (!process.env.RESEND_API_KEY) {
-    console.log(`[email:dev] Presença confirmada para ${data.email} - evento ${data.eventName} em ${formattedDate}`)
-    return
-  }
-
-  try {
-    await resend.emails.send({
-      from: 'FlowPass <no-reply@flowpass.com>',
-      to: data.email,
-      subject: `Presença Confirmada - ${data.eventName}`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1>Presença confirmada!</h1>
-          <p>Olá, <strong>${data.name}</strong>!</p>
-          <p>Sua entrada no evento <strong>${data.eventName}</strong> foi registrada com sucesso.</p>
-          <p style="background: #f0fdf4; border-left: 4px solid #00C896; padding: 16px; margin: 24px 0;">
-            <strong>Horário do check-in:</strong> ${formattedDate}
-          </p>
-          <p>Bem-vindo(a)! Aproveite o evento.</p>
-          <hr />
-          <p style="font-size: 12px; color: #666;">Enviado por ${data.companyName} via FlowPass</p>
-        </div>
-      `
-    })
-  } catch (err) {
-    console.error('Failed to send attendance email:', err)
-  }
-}
-
 export async function sendWhatsAppMessage(data: {
   phone: string,
   name: string,
@@ -93,6 +75,7 @@ export async function sendWhatsAppMessage(data: {
   const instance = process.env.EVOLUTION_INSTANCE
 
   if (!apiUrl || !apiKey || !instance) return
+  if (/placeholder|your-/i.test(apiUrl + apiKey + instance)) return
 
   try {
     await axios.post(`${apiUrl}/message/sendMedia/${instance}`, {

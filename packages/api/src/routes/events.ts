@@ -1,118 +1,17 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { FastifyInstance } from 'fastify'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { prisma } from '../../../database'
 import bcrypt from 'bcryptjs'
-import { getJwtUser, requireCompanyUser } from '../utils/auth'
-import { formatEventAddress, normalizeCep } from '../utils/address'
-import { optionalPositiveInt } from '../utils/zod'
-
-const categorySchema = z.object({
-  name: z.string().min(1),
-  max_capacity: optionalPositiveInt,
-  color: z.string().optional()
-})
-
-const formFieldSchema = z.object({
-  label: z.string().min(1),
-  type: z.enum(['text', 'email', 'phone', 'cpf', 'select', 'multi_select', 'number']),
-  required: z.boolean().default(false),
-  options: z.array(z.string()).optional(),
-  order: z.number().int().default(0)
-})
-
-const eventBodySchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  start_at: z.string().datetime(),
-  end_at: z.string().datetime(),
-  cep: z.string().min(8),
-  street: z.string().min(1),
-  number: z.string().min(1),
-  complement: z.string().optional(),
-  neighborhood: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  banner_color: z.string().optional(),
-  accent_color: z.string().optional(),
-  welcome_message: z.string().optional(),
-  max_capacity: optionalPositiveInt,
-  is_paid: z.boolean().default(false),
-  waitlist_enabled: z.boolean().default(false),
-  status: z.enum(['draft', 'active']).default('active'),
-  categories: z.array(categorySchema).min(1),
-  form_fields: z.array(formFieldSchema).default([])
-})
-
-const publicEventSelect = {
-  id: true,
-  name: true,
-  description: true,
-  start_at: true,
-  location: true,
-  cep: true,
-  street: true,
-  number: true,
-  complement: true,
-  neighborhood: true,
-  city: true,
-  state: true,
-  banner_color: true,
-  accent_color: true,
-  welcome_message: true,
-  categories: { select: { id: true, name: true, color: true } },
-  form_fields: {
-    select: {
-      id: true,
-      label: true,
-      type: true,
-      required: true,
-      options: true,
-      order: true
-    }
-  }
-} as const
-
-const publicEventListSelect = {
-  id: true,
-  name: true,
-  description: true,
-  start_at: true,
-  end_at: true,
-  location: true,
-  cep: true,
-  street: true,
-  number: true,
-  complement: true,
-  neighborhood: true,
-  city: true,
-  state: true,
-  banner_color: true,
-  accent_color: true,
-  welcome_message: true,
-  categories: { select: { id: true, name: true, color: true } },
-  company: { select: { name: true } }
-} as const
+import {
+  getJwtUser,
+  requireCompanyContext,
+  requireEventInCompany,
+  requireRoles
+} from '../lib/auth'
+import { createDefaultRegistrationForm } from '../services/registration-form'
 
 export async function eventRoutes(app: FastifyInstance) {
-  const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
-    const companyId = await requireCompanyUser(request, reply)
-    if (typeof companyId !== 'string') return
-  }
-
-  app.withTypeProvider<ZodTypeProvider>().get('/public/events', async () => {
-    const now = new Date()
-
-    return prisma.event.findMany({
-      where: {
-        status: 'active',
-        end_at: { gte: now }
-      },
-      orderBy: { start_at: 'asc' },
-      select: publicEventListSelect
-    })
-  })
-
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id/public', {
     schema: {
       params: z.object({ id: z.string().uuid() })
@@ -120,209 +19,154 @@ export async function eventRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { id } = request.params
     const event = await prisma.event.findUnique({
-      where: { id, status: 'active' },
-      select: publicEventSelect
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        start_at: true,
+        location: true,
+        status: true,
+        company: { select: { status: true } },
+        categories: { select: { id: true, name: true } },
+        registration_forms: {
+          select: { public_id: true, name: true, status: true },
+          orderBy: { created_at: 'asc' },
+          take: 1
+        }
+      }
     })
-    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
-    return event
+    if (!event || event.company.status === 'inactive') {
+      return reply.status(404).send({ message: 'Evento não encontrado' })
+    }
+    const primaryForm = event.registration_forms[0]
+    const { company: _, registration_forms, ...publicEvent } = event
+    return {
+      ...publicEvent,
+      primary_form_public_id: primaryForm?.public_id ?? null
+    }
   })
 
   app.withTypeProvider<ZodTypeProvider>().post('/events', {
-    preHandler: [requireAuth],
-    schema: { body: eventBodySchema }
+    preHandler: [requireRoles('admin')],
+    schema: {
+      body: z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        start_at: z.string().datetime(),
+        end_at: z.string().datetime(),
+        location: z.string().optional(),
+        image_url: z.string().url().optional(),
+        max_capacity: z.number().optional(),
+        is_paid: z.boolean().default(false),
+        waitlist_enabled: z.boolean().default(false)
+      })
+    }
   }, async (request, reply) => {
+    if (reply.sent) return
+
     const { company_id } = getJwtUser(request)
     const data = request.body
 
-    const normalizedCep = normalizeCep(data.cep)
-    if (normalizedCep.length !== 8) {
-      return reply.status(400).send({ message: 'CEP inválido. Informe 8 dígitos.' })
-    }
-
-    const startAt = new Date(data.start_at)
-    const endAt = new Date(data.end_at)
-    if (endAt <= startAt) {
-      return reply.status(400).send({ message: 'A data de fim deve ser posterior à data de início.' })
-    }
-
-    const address = {
-      street: data.street.trim(),
-      number: data.number.trim(),
-      complement: data.complement?.trim() || null,
-      neighborhood: data.neighborhood?.trim() || null,
-      city: data.city?.trim() || null,
-      state: data.state?.trim() || null,
-      cep: normalizedCep
-    }
-
     const event = await prisma.event.create({
       data: {
+        ...data,
         company_id: company_id!,
-        name: data.name.trim(),
-        description: data.description?.trim() || null,
-        start_at: startAt,
-        end_at: endAt,
-        ...address,
-        location: formatEventAddress(address),
-        banner_color: data.banner_color || '#0B1F3A',
-        accent_color: data.accent_color || '#00C896',
-        welcome_message: data.welcome_message?.trim() || null,
-        max_capacity: data.max_capacity,
-        is_paid: data.is_paid,
-        waitlist_enabled: data.waitlist_enabled,
-        status: data.status,
-        categories: {
-          create: data.categories.map((category) => ({
-            name: category.name.trim(),
-            max_capacity: category.max_capacity,
-            color: category.color || '#00C896'
-          }))
-        },
-        form_fields: {
-          create: data.form_fields.map((field, index) => ({
-            label: field.label.trim(),
-            type: field.type,
-            required: field.required,
-            options: field.options?.length ? field.options : undefined,
-            order: field.order ?? index
-          }))
-        }
-      },
-      include: { categories: true, form_fields: true }
+        status: 'active',
+        start_at: new Date(data.start_at),
+        end_at: new Date(data.end_at)
+      }
     })
+
+    await createDefaultRegistrationForm(event.id)
 
     return event
   })
 
   app.withTypeProvider<ZodTypeProvider>().get('/events', {
-    preHandler: [requireAuth]
-  }, async (request) => {
-    const { company_id } = getJwtUser(request)
+    preHandler: [requireCompanyContext]
+  }, async (request, reply) => {
+    if (reply.sent) return
+
+    const { company_id, role } = getJwtUser(request)
+
+    if (role === 'operator') {
+      const operatorEvents = await prisma.operator.findMany({
+        where: { user_id: getJwtUser(request).sub, active: true },
+        select: { event_id: true }
+      })
+      const eventIds = operatorEvents.map(o => o.event_id)
+      return prisma.event.findMany({
+        where: { company_id: company_id!, id: { in: eventIds }, status: 'active' },
+        orderBy: { created_at: 'desc' }
+      })
+    }
+
     return prisma.event.findMany({
-      where: { company_id },
+      where: { company_id: company_id! },
       orderBy: { created_at: 'desc' }
     })
   })
 
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id', {
-    preHandler: [requireAuth],
+    preHandler: [requireCompanyContext],
     schema: {
       params: z.object({ id: z.string().uuid() })
     }
   }, async (request, reply) => {
     const { id } = request.params
-    const { company_id } = getJwtUser(request)
+    const ctx = await requireEventInCompany(request, reply, id)
+    if (!ctx) return
 
     const event = await prisma.event.findFirst({
-      where: { id, company_id },
+      where: { id, company_id: ctx.user.company_id! },
       include: {
         categories: true,
-        form_fields: true,
-        registrations: {
-          orderBy: { created_at: 'desc' },
+        registration_links: {
+          include: { default_category: { select: { id: true, name: true } } }
+        },
+        access_points: {
           include: {
-            category: { select: { name: true } },
-            checkins: {
-              where: { is_duplicate: false },
-              orderBy: { checked_at: 'desc' },
-              take: 1,
-              select: { checked_at: true }
-            }
+            categories: { include: { category: { select: { id: true, name: true } } } }
           }
         },
-        operators: {
-          include: { user: true }
-        }
+        registration_forms: {
+          include: {
+            _count: { select: { form_fields: true, registrations: true } }
+          },
+          orderBy: { created_at: 'asc' }
+        },
+        registrations: { orderBy: { created_at: 'desc' } },
+        operators: { include: { user: true } }
       }
     })
 
-    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
     return event
   })
 
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/categories', {
-    preHandler: [requireAuth],
+    preHandler: [requireRoles('admin')],
     schema: {
       params: z.object({ id: z.string().uuid() }),
-      body: categorySchema
+      body: z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        max_capacity: z.number().optional(),
+        color: z.string().optional()
+      })
     }
   }, async (request, reply) => {
     const { id: event_id } = request.params
-    const { company_id } = getJwtUser(request)
-
-    const event = await prisma.event.findFirst({
-      where: { id: event_id, company_id }
-    })
-
-    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
 
     return prisma.category.create({
-      data: {
-        event_id,
-        name: request.body.name.trim(),
-        max_capacity: request.body.max_capacity,
-        color: request.body.color || '#00C896'
-      }
+      data: { ...request.body, event_id }
     })
-  })
-
-  app.withTypeProvider<ZodTypeProvider>().post('/events/:id/form-fields', {
-    preHandler: [requireAuth],
-    schema: {
-      params: z.object({ id: z.string().uuid() }),
-      body: formFieldSchema
-    }
-  }, async (request, reply) => {
-    const { id: event_id } = request.params
-    const { company_id } = getJwtUser(request)
-
-    const event = await prisma.event.findFirst({
-      where: { id: event_id, company_id }
-    })
-
-    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
-
-    const count = await prisma.formField.count({ where: { event_id } })
-
-    return prisma.formField.create({
-      data: {
-        event_id,
-        label: request.body.label.trim(),
-        type: request.body.type,
-        required: request.body.required,
-        options: request.body.options?.length ? request.body.options : undefined,
-        order: request.body.order ?? count
-      }
-    })
-  })
-
-  app.withTypeProvider<ZodTypeProvider>().delete('/events/:id/form-fields/:fieldId', {
-    preHandler: [requireAuth],
-    schema: {
-      params: z.object({ id: z.string().uuid(), fieldId: z.string().uuid() })
-    }
-  }, async (request, reply) => {
-    const { id: event_id, fieldId } = request.params
-    const { company_id } = getJwtUser(request)
-
-    const event = await prisma.event.findFirst({
-      where: { id: event_id, company_id }
-    })
-
-    if (!event) return reply.status(404).send({ message: 'Evento não encontrado' })
-
-    const field = await prisma.formField.findFirst({
-      where: { id: fieldId, event_id }
-    })
-
-    if (!field) return reply.status(404).send({ message: 'Campo não encontrado' })
-
-    await prisma.formField.delete({ where: { id: fieldId } })
-    return reply.status(204).send()
   })
 
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/operators', {
-    preHandler: [requireAuth],
+    preHandler: [requireRoles('admin')],
     schema: {
       params: z.object({ id: z.string().uuid() }),
       body: z.object({
@@ -330,9 +174,12 @@ export async function eventRoutes(app: FastifyInstance) {
         email: z.string().email()
       })
     }
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id: event_id } = request.params
-    const { company_id } = getJwtUser(request)
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
+
+    const { company_id } = ctx.user
     const { name, email } = request.body
 
     const temp_password = Math.random().toString(36).substring(2, 10)
@@ -363,10 +210,13 @@ export async function eventRoutes(app: FastifyInstance) {
   })
 
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id/operators', {
-    preHandler: [requireAuth],
+    preHandler: [requireRoles('admin', 'viewer')],
     schema: { params: z.object({ id: z.string().uuid() }) }
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id: event_id } = request.params
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
+
     return prisma.operator.findMany({
       where: { event_id },
       include: { user: true }
@@ -374,12 +224,22 @@ export async function eventRoutes(app: FastifyInstance) {
   })
 
   app.withTypeProvider<ZodTypeProvider>().delete('/events/:id/operators/:opId', {
-    preHandler: [requireAuth],
+    preHandler: [requireRoles('admin')],
     schema: {
       params: z.object({ id: z.string().uuid(), opId: z.string().uuid() })
     }
   }, async (request, reply) => {
-    const { opId } = request.params
+    const { id: event_id, opId } = request.params
+    const ctx = await requireEventInCompany(request, reply, event_id)
+    if (!ctx) return
+
+    const operator = await prisma.operator.findFirst({
+      where: { id: opId, event_id }
+    })
+    if (!operator) {
+      return reply.status(404).send({ message: 'Operador não encontrado' })
+    }
+
     await prisma.operator.update({
       where: { id: opId },
       data: { active: false }

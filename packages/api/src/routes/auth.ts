@@ -37,6 +37,15 @@ export async function authRoutes(app: FastifyInstance) {
       expiresIn: '7d'
     })
 
-    return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } }
+    return {
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        company_id: user.company_id
+      }
+    }
   })
 }

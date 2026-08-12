@@ -238,6 +238,42 @@ export default function EventDetailsPage() {
               </button>
             </div>
           </div>
+
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h2 className="text-lg font-bold text-[#0B1F3A] mb-4">Configuração do evento</h2>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => router.push(`/dashboard/events/${eventId}/participants`)}
+                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
+              >
+                Participantes
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/events/${eventId}/forms`)}
+                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
+              >
+                Formulários
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/events/${eventId}/categories`)}
+                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
+              >
+                Categorias
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/events/${eventId}/registration-links`)}
+                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
+              >
+                Links de inscrição
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/events/${eventId}/access-points`)}
+                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
+              >
+                Pontos de acesso
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

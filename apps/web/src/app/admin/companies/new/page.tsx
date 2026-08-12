@@ -1,78 +1,49 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import axios, { isAxiosError } from 'axios'
+import axios from 'axios'
 import toast from 'react-hot-toast'
+import { getHomeRoute, getStoredUser } from '@/store/auth'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
-
-function getApiErrorMessage(error: unknown, fallback: string) {
-  if (!isAxiosError(error)) return fallback
-  const message = error.response?.data?.message
-  return typeof message === 'string' ? message : fallback
-}
 
 export default function NewCompanyPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [form, setForm] = useState({
-    company_name: '',
-    cnpj: '',
-    admin_name: '',
+    name: '',
     email: '',
-    password: '',
-    confirmPassword: ''
+    cnpj: '',
+    status: 'active' as 'active' | 'inactive',
+    admin_name: '',
+    admin_email: '',
+    admin_password: ''
   })
+
+  useEffect(() => {
+    const user = getStoredUser()
+    if (!user || user.role !== 'super_admin') {
+      router.push(user ? getHomeRoute(user.role) : '/login')
+    }
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setErrorMessage(null)
-
-    if (form.password.length < 6) {
-      const message = 'A senha deve ter pelo menos 6 caracteres.'
-      setErrorMessage(message)
-      toast.error(message)
-      return
-    }
-
-    if (form.password !== form.confirmPassword) {
-      const message = 'As senhas não coincidem.'
-      setErrorMessage(message)
-      toast.error(message)
-      return
-    }
-
-    const normalizedCnpj = form.cnpj.replace(/\D/g, '')
-    if (normalizedCnpj.length !== 14) {
-      const message = 'CNPJ inválido. Informe os 14 dígitos.'
-      setErrorMessage(message)
-      toast.error(message)
-      return
-    }
-
     setLoading(true)
     try {
       const token = localStorage.getItem('token')
-      await axios.post(
-        `${API_URL}/companies`,
-        {
-          company_name: form.company_name.trim(),
-          cnpj: normalizedCnpj,
-          admin_name: form.admin_name.trim(),
-          email: form.email.trim().toLowerCase(),
-          password: form.password
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-
-      toast.success('Empresa cadastrada! O gestor já pode entrar e criar eventos.')
-      router.push('/admin')
+      await axios.post(`${API_URL}/admin/companies`, form, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      toast.success('Empresa criada com sucesso!')
+      router.push('/admin/companies')
     } catch (error: unknown) {
-      const message = getApiErrorMessage(error, 'Erro ao cadastrar empresa')
-      setErrorMessage(message)
-      toast.error(message)
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        toast.error('E-mail ou CNPJ já cadastrado')
+      } else {
+        toast.error('Erro ao criar empresa')
+      }
     } finally {
       setLoading(false)
     }
@@ -81,42 +52,69 @@ export default function NewCompanyPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => router.push('/admin')} className="text-[#0B1F3A] mb-6 hover:underline">
+        <button
+          onClick={() => router.push('/admin/companies')}
+          className="text-[#00C896] hover:underline mb-6"
+        >
           ← Voltar
         </button>
 
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-[#0B1F3A] mb-2">Cadastrar Empresa</h1>
-          <p className="text-gray-900 mb-8">
-            Crie a conta da empresa e do gestor responsável pelos eventos.
-          </p>
+          <h1 className="text-3xl font-bold text-[#0B1F3A] mb-8">Nova Empresa</h1>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">Nome da Empresa</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa</label>
               <input
                 type="text"
                 required
-                value={form.company_name}
-                onChange={(e) => setForm({ ...form, company_name: e.target.value })}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">CNPJ</label>
-              <input
-                type="text"
-                required
-                value={form.cnpj}
-                onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
-                placeholder="00.000.000/0000-00"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">E-mail da Empresa</label>
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
+                <input
+                  type="text"
+                  required
+                  value={form.cnpj}
+                  onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">Nome do Gestor</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value as 'active' | 'inactive' })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+              >
+                <option value="active">Ativa</option>
+                <option value="inactive">Inativa</option>
+              </select>
+            </div>
+
+            <hr />
+
+            <h2 className="text-xl font-semibold text-[#0B1F3A]">Administrador da Empresa</h2>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
               <input
                 type="text"
                 required
@@ -126,51 +124,36 @@ export default function NewCompanyPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">E-mail do Gestor</label>
-              <input
-                type="email"
-                required
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">Senha inicial</label>
-              <input
-                type="password"
-                required
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-900 mb-1">Confirmar Senha</label>
-              <input
-                type="password"
-                required
-                value={form.confirmPassword}
-                onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-              />
-            </div>
-
-            {errorMessage && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {errorMessage}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                <input
+                  type="email"
+                  required
+                  value={form.admin_email}
+                  onChange={(e) => setForm({ ...form, admin_email: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Senha inicial</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={form.admin_password}
+                  onChange={(e) => setForm({ ...form, admin_password: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+                />
+              </div>
+            </div>
 
             <button
               type="submit"
               disabled={loading}
               className="w-full bg-[#00C896] hover:bg-[#00a876] text-white font-semibold py-2 rounded-lg disabled:opacity-50"
             >
-              {loading ? 'Cadastrando...' : 'Cadastrar Empresa'}
+              {loading ? 'Criando...' : 'Criar Empresa'}
             </button>
           </form>
         </div>

@@ -6,7 +6,7 @@ interface User {
   id: string
   name: string
   email: string
-  role: 'admin' | 'viewer' | 'operator'
+  role: 'super_admin' | 'admin' | 'viewer' | 'operator'
 }
 
 interface AuthStore {
@@ -17,7 +17,7 @@ interface AuthStore {
   loadStorage: () => Promise<void>
 }
 
-const API_URL = 'http://localhost:3333' // Change to your IP for physical device
+import { API_URL } from '../config/api'
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,

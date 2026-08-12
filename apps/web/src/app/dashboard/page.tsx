@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { getHomeForRole, getStoredUser } from '@/lib/auth'
+import { canManageEvents, getHomeRoute, getStoredUser } from '@/store/auth'
 
 interface Event {
   id: string
@@ -20,6 +20,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [canCreate, setCanCreate] = useState(false)
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -32,10 +33,12 @@ export default function DashboardPage() {
           return
         }
 
-        if (user.role === 'superadmin') {
-          router.push(getHomeForRole(user.role))
+        if (user.role === 'super_admin') {
+          router.push(getHomeRoute(user.role))
           return
         }
+
+        setCanCreate(canManageEvents(user.role))
 
         const response = await axios.get(`${API_URL}/events`, {
           headers: { Authorization: `Bearer ${token}` }
@@ -81,27 +84,31 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto p-8">
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-3xl font-bold text-[#0B1F3A]">Meus Eventos</h2>
-          <button
-            onClick={() => router.push('/dashboard/events/new')}
-            className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg font-semibold"
-          >
-            + Novo Evento
-          </button>
+          {canCreate && (
+            <button
+              onClick={() => router.push('/dashboard/events/new')}
+              className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg font-semibold"
+            >
+              + Novo Evento
+            </button>
+          )}
         </div>
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-900">Carregando eventos...</p>
+            <p className="text-gray-600">Carregando eventos...</p>
           </div>
         ) : events.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-900 mb-4">Nenhum evento criado ainda</p>
-            <button
-              onClick={() => router.push('/dashboard/events/new')}
-              className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg"
-            >
-              Criar Primeiro Evento
-            </button>
+            <p className="text-gray-600 mb-4">Nenhum evento criado ainda</p>
+            {canCreate && (
+              <button
+                onClick={() => router.push('/dashboard/events/new')}
+                className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg"
+              >
+                Criar Primeiro Evento
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -117,7 +124,7 @@ export default function DashboardPage() {
                     {event.status === 'draft' ? 'Rascunho' : event.status === 'active' ? 'Ativo' : 'Finalizado'}
                   </span>
                 </div>
-                <p className="text-sm text-gray-900">
+                <p className="text-sm text-gray-600">
                   {new Date(event.start_at).toLocaleDateString('pt-BR')}
                 </p>
               </div>
