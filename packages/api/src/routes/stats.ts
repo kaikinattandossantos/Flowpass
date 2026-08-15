@@ -17,12 +17,12 @@ export async function statsRoutes(app: FastifyInstance) {
 
     const [total_registered, total_checked_in, by_category] = await Promise.all([
       prisma.registration.count({ where: { event_id, status: 'confirmed' } }),
-      prisma.checkIn.count({ where: { registration: { event_id } } }),
+      prisma.checkIn.count({ where: { registration: { event_id }, is_duplicate: false } }),
       prisma.category.findMany({
         where: { event_id },
         include: {
           _count: {
-            select: { registrations: { where: { checkins: { some: {} } } } }
+            select: { registrations: { where: { checkins: { some: { is_duplicate: false } } } } }
           }
         }
       })

@@ -20,7 +20,21 @@ export async function initDatabase() {
       checked_at TEXT NOT NULL,
       synced INTEGER DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS app_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `)
+
+  const device = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM app_metadata WHERE key = 'device_id'"
+  )
+  if (!device) {
+    await db.runAsync(
+      'INSERT INTO app_metadata (key, value) VALUES (?, ?)',
+      ['device_id', Crypto.randomUUID()]
+    )
+  }
 }
 
 export async function saveRegistrations(registrations: Array<{ t: string, n: string, c: string }>) {
@@ -81,8 +95,10 @@ export async function validateCheckin(token: string, operatorId: string, expecte
 
 export async function getUnsyncedCheckins() {
   if (!db) return []
-  return await db.getAllAsync<{ uuid: string, token: string, checked_at: string }>(
-    'SELECT uuid, token as qr_token, checked_at FROM checkins WHERE synced = 0'
+  return await db.getAllAsync<{ uuid: string, qr_token: string, checked_at: string, device_id: string }>(
+    `SELECT uuid, token as qr_token, checked_at,
+      (SELECT value FROM app_metadata WHERE key = 'device_id') as device_id
+     FROM checkins WHERE synced = 0`
   )
 }
 

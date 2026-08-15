@@ -17,6 +17,7 @@ import {
   validateResolvedStructuralValues
 } from '../utils/resolve-structural-values'
 import { formatParticipant } from '../utils/participant'
+import { reconcileOfflineCheckin } from '../services/offline-checkin'
 
 export async function registrationRoutes(app: FastifyInstance) {
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/registrations', {
@@ -170,42 +171,53 @@ export async function registrationRoutes(app: FastifyInstance) {
     const results = []
 
     for (const checkin of checkins) {
-      const registration = await prisma.registration.findFirst({
-        where: { qr_token: checkin.qr_token, event_id },
-        include: { category: true }
+      const result = await reconcileOfflineCheckin({
+        eventId: event_id,
+        operatorId,
+        checkin
       })
+      results.push(result)
 
-      if (!registration) continue
-
-      const existing = await prisma.checkIn.findUnique({
-        where: { uuid: checkin.uuid }
-      })
-
-      if (!existing) {
-        const newCheckin = await prisma.checkIn.create({
-          data: {
+      if (result.status === 'accepted' && result.registration_id) {
+        const registration = await prisma.registration.findUnique({
+          where: { id: result.registration_id },
+          include: { category: true }
+        })
+        if (registration) {
+          const socketIo = getSocketIo()
+          socketIo?.of(`/events/${event_id}`).emit('checkin', {
             registration_id: registration.id,
-            operator_id: operatorId,
-            device_id: checkin.device_id,
-            checked_at: new Date(checkin.checked_at),
-            uuid: checkin.uuid,
-            synced_at: new Date()
-          }
-        })
-
-        const socketIo = getSocketIo()
-        socketIo?.of(`/events/${event_id}`).emit('checkin', {
-          registration_id: registration.id,
-          name: registration.name,
-          category: registration.category?.name ?? '',
-          checked_at: newCheckin.checked_at,
-          operator_name: 'Operator'
-        })
-
-        results.push(newCheckin)
+            name: registration.name,
+            category: registration.category?.name ?? '',
+            checked_at: checkin.checked_at,
+            operator_name: 'Operator'
+          })
+        }
       }
     }
 
-    return { synced: results.length }
+    const storedResults = await prisma.checkIn.findMany({
+      where: { uuid: { in: results.map((result) => result.uuid) } },
+      select: { uuid: true, is_duplicate: true }
+    })
+    const storedByUuid = new Map(storedResults.map((stored) => [stored.uuid, stored]))
+    const reconciledResults = results.map((result) => {
+      const stored = storedByUuid.get(result.uuid)
+      if (!stored || result.status === 'already_synced') return result
+      return {
+        ...result,
+        status: stored.is_duplicate ? 'duplicate' as const : 'accepted' as const
+      }
+    })
+
+    return {
+      synced: reconciledResults.filter((result) =>
+        result.status === 'accepted' ||
+        result.status === 'duplicate' ||
+        result.status === 'already_synced'
+      ).length,
+      acknowledged_uuids: reconciledResults.map((result) => result.uuid),
+      results: reconciledResults
+    }
   })
 }

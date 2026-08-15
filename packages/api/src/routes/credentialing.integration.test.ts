@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import { buildApp } from '../app.js'
 import { prisma } from '../../../database/index.js'
 import { createRegistrationRecord } from '../services/registration-create.js'
@@ -349,6 +350,125 @@ describe('credentialing integration', { skip: !dbReady }, () => {
     assert.equal(second.statusCode, 200)
     assert.equal(second.json().result, 'already_checked_in')
     assert.ok(second.json().checked_at)
+  })
+
+  it('reconciles offline check-ins from multiple devices and keeps the earliest as valid', async () => {
+    const fresh = await createRegistrationRecord({
+      event_id: eventId,
+      category_id: categoryRioFormoso,
+      name: 'Offline Multi Device',
+      email: `offline-multi-${Date.now()}@test.com`,
+      form_data: {},
+      origin: 'MANUAL',
+      status: 'confirmed',
+      sendNotifications: false,
+      skipDuplicateCheck: true
+    })
+
+    const laterUuid = crypto.randomUUID()
+    const earlierUuid = crypto.randomUUID()
+    const later = new Date(Date.now() - 1_000).toISOString()
+    const earlier = new Date(Date.now() - 5_000).toISOString()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/events/${eventId}/checkins`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: [
+        { uuid: laterUuid, qr_token: fresh.qr_token, checked_at: later, device_id: 'device-b' },
+        { uuid: earlierUuid, qr_token: fresh.qr_token, checked_at: earlier, device_id: 'device-a' }
+      ]
+    })
+
+    assert.equal(res.statusCode, 200, res.body)
+    assert.deepEqual(res.json().results.map((item: { status: string }) => item.status), [
+      'duplicate',
+      'accepted'
+    ])
+
+    const stored = await prisma.checkIn.findMany({
+      where: { registration_id: fresh.id },
+      orderBy: { checked_at: 'asc' }
+    })
+    assert.equal(stored.length, 2)
+    assert.equal(stored[0].uuid, earlierUuid)
+    assert.equal(stored[0].is_duplicate, false)
+    assert.equal(stored[0].device_id, 'device-a')
+    assert.equal(stored[1].uuid, laterUuid)
+    assert.equal(stored[1].is_duplicate, true)
+  })
+
+  it('is idempotent when the same offline UUID is synchronized twice', async () => {
+    const fresh = await createRegistrationRecord({
+      event_id: eventId,
+      category_id: categoryRioFormoso,
+      name: 'Offline Idempotent',
+      email: `offline-idempotent-${Date.now()}@test.com`,
+      form_data: {},
+      origin: 'MANUAL',
+      status: 'confirmed',
+      sendNotifications: false,
+      skipDuplicateCheck: true
+    })
+    const uuid = crypto.randomUUID()
+    const payload = [{
+      uuid,
+      qr_token: fresh.qr_token,
+      checked_at: new Date().toISOString(),
+      device_id: 'device-idempotent'
+    }]
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/events/${eventId}/checkins`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload
+    })
+    const second = await app.inject({
+      method: 'POST',
+      url: `/events/${eventId}/checkins`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload
+    })
+
+    assert.equal(first.json().results[0].status, 'accepted')
+    assert.equal(second.json().results[0].status, 'already_synced')
+    assert.equal(await prisma.checkIn.count({ where: { uuid } }), 1)
+  })
+
+  it('rejects an expired QR during offline synchronization', async () => {
+    const fresh = await createRegistrationRecord({
+      event_id: eventId,
+      category_id: categoryRioFormoso,
+      name: 'Expired Offline',
+      email: `expired-offline-${Date.now()}@test.com`,
+      form_data: {},
+      origin: 'MANUAL',
+      status: 'confirmed',
+      sendNotifications: false,
+      skipDuplicateCheck: true
+    })
+    await prisma.registration.update({
+      where: { id: fresh.id },
+      data: { qr_token_expires_at: new Date(Date.now() - 1_000) }
+    })
+
+    const uuid = crypto.randomUUID()
+    const res = await app.inject({
+      method: 'POST',
+      url: `/events/${eventId}/checkins`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: [{
+        uuid,
+        qr_token: fresh.qr_token,
+        checked_at: new Date().toISOString(),
+        device_id: 'device-expired'
+      }]
+    })
+
+    assert.equal(res.statusCode, 200, res.body)
+    assert.equal(res.json().results[0].status, 'expired_qr')
+    assert.equal(await prisma.checkIn.count({ where: { uuid } }), 0)
   })
 
   it('rejects inactive link', async () => {

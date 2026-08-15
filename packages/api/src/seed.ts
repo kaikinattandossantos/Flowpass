@@ -7,7 +7,10 @@ import { generatePublicId } from '../src/utils/public-id'
 async function main() {
   await prisma.user.upsert({
     where: { email: 'superadmin@flowpass.com.br' },
-    update: {},
+    update: {
+      role: 'super_admin',
+      company_id: null
+    },
     create: {
       name: 'Super Admin FlowPass',
       email: 'superadmin@flowpass.com.br',
