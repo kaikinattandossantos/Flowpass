@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { StyleSheet, Text, View, TouchableOpacity, Alert, TextInput, ScrollView, Image, Linking } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Audio } from 'expo-av'
-import { initDatabase, validateCheckin, saveRegistrations, getUnsyncedCheckins, markAsSynced } from './services/database'
+import { initDatabase, validateCheckin } from './services/database'
 import { useAuthStore } from './store/auth'
 import axios from 'axios'
 import { CheckCircle, XCircle, RefreshCw, AlertTriangle, LogOut, Camera } from 'lucide-react-native'
 
 import { API_URL } from './config/api'
+import { useCredentialSync } from './hooks/useCredentialSync'
 
 type Screen = 'login' | 'select-event' | 'sync' | 'scanner'
 
@@ -22,8 +23,7 @@ export default function App() {
   const [password, setPassword] = useState('')
   const [events, setEvents] = useState<any[]>([])
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [lastSync, setLastSync] = useState<string | null>(null)
+  const { isConnected, lastSync, pendingCount, refreshPendingCount, syncData, syncing } = useCredentialSync(token, selectedEvent)
 
   useEffect(() => {
     initDatabase()
@@ -74,6 +74,7 @@ export default function App() {
     try {
       const res = await validateCheckin(data, user.id)
       if (res.success) {
+        await refreshPendingCount()
         playSound('success')
         setResult({ type: 'success', message: 'Entrada Liberada!', name: res.name })
       } else if (res.type === 'wrong_category') {
@@ -96,32 +97,6 @@ export default function App() {
       setScanned(false)
       setResult(null)
     }, 3000)
-  }
-
-  const syncData = async () => {
-    if (!token || syncing || !selectedEvent) return
-    setSyncing(true)
-    try {
-      const response = await axios.get(`${API_URL}/events/${selectedEvent.id}/sync`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      await saveRegistrations(response.data)
-
-      const unsynced = await getUnsyncedCheckins()
-      if (unsynced.length > 0) {
-        await axios.post(`${API_URL}/events/${selectedEvent.id}/checkins`, unsynced, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        await markAsSynced(unsynced.map(c => c.uuid))
-      }
-      
-      setLastSync(new Date().toLocaleTimeString('pt-BR'))
-      Alert.alert('Sucesso', 'Dados sincronizados!')
-    } catch (error) {
-      Alert.alert('Erro', 'Falha na sincronização')
-    } finally {
-      setSyncing(false)
-    }
   }
 
   if (screen === 'login') {
@@ -193,8 +168,11 @@ export default function App() {
           <Text style={styles.syncStatus}>
             {lastSync ? `Última sincronização: ${lastSync}` : 'Ainda não sincronizado'}
           </Text>
+          <Text style={[styles.connectionStatus, { color: isConnected ? '#00C896' : '#FFB800' }]}>
+            {isConnected ? 'Online' : 'Offline'} · {pendingCount} check-in(s) pendente(s)
+          </Text>
           
-          <TouchableOpacity onPress={syncData} style={[styles.button, {width: '100%', marginBottom: 10}]}>
+          <TouchableOpacity onPress={() => void syncData()} style={[styles.button, {width: '100%', marginBottom: 10}]}>
             <Text style={styles.buttonText}>{syncing ? 'Sincronizando...' : 'Sincronizar Agora'}</Text>
           </TouchableOpacity>
 
@@ -257,7 +235,7 @@ export default function App() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setScreen('sync')}><Text style={{color: 'white'}}>Sair</Text></TouchableOpacity>
           <Text style={styles.title}>FlowPass Reader</Text>
-          <TouchableOpacity onPress={syncData} disabled={syncing}>
+          <TouchableOpacity onPress={() => void syncData()} disabled={syncing}>
             <RefreshCw color="white" size={24} />
           </TouchableOpacity>
         </View>
@@ -298,6 +276,7 @@ const styles = StyleSheet.create({
   syncContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
   syncEventName: { color: 'white', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   syncStatus: { color: '#00C896', marginVertical: 20 },
+  connectionStatus: { fontSize: 14, fontWeight: 'bold', marginBottom: 20 },
   permissionContainer: { flex: 1, backgroundColor: '#0B1F3A', justifyContent: 'center', alignItems: 'center', padding: 30 },
   permissionTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginTop: 18 },
   permissionText: { color: '#D1D5DB', fontSize: 16, textAlign: 'center', marginVertical: 16, lineHeight: 24 },
