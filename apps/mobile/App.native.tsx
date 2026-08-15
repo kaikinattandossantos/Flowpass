@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { StyleSheet, Text, View, TouchableOpacity, Alert, TextInput, ScrollView, Image } from 'react-native'
+import { StyleSheet, Text, View, TouchableOpacity, Alert, TextInput, ScrollView, Image, Linking } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Audio } from 'expo-av'
 import { initDatabase, validateCheckin, saveRegistrations, getUnsyncedCheckins, markAsSynced } from './services/database.native'
@@ -186,7 +186,7 @@ export default function App() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setScreen('select-event')}><Text style={{color: 'white'}}>Voltar</Text></TouchableOpacity>
           <Text style={styles.title}>Sincronização</Text>
-          <View width={24} />
+          <View style={{ width: 24 }} />
         </View>
         <View style={styles.syncContent}>
           <Text style={styles.syncEventName}>{selectedEvent.name}</Text>
@@ -200,11 +200,48 @@ export default function App() {
 
           <TouchableOpacity 
             onPress={() => setScreen('scanner')} 
-            style={[styles.button, {width: '100%', backgroundColor: '#0B1F3A', borderWith: 1, borderColor: '#00C896'}]}
+            style={[styles.button, {width: '100%', backgroundColor: '#0B1F3A', borderWidth: 1, borderColor: '#00C896'}]}
           >
             <Text style={styles.buttonText}>Iniciar Credenciamento</Text>
           </TouchableOpacity>
         </View>
+      </View>
+    )
+  }
+
+  if (!permission) {
+    return (
+      <View style={styles.permissionContainer}>
+        <Text style={styles.permissionTitle}>Preparando a câmera...</Text>
+      </View>
+    )
+  }
+
+  if (!permission.granted) {
+    return (
+      <View style={styles.permissionContainer}>
+        <Camera color="#00C896" size={56} />
+        <Text style={styles.permissionTitle}>Permita o acesso à câmera</Text>
+        <Text style={styles.permissionText}>
+          O FlowPass precisa da câmera para ler o QR Code das credenciais.
+        </Text>
+        <TouchableOpacity
+          style={[styles.button, { width: '100%' }]}
+          onPress={async () => {
+            if (permission.canAskAgain) {
+              await requestPermission()
+            } else {
+              await Linking.openSettings()
+            }
+          }}
+        >
+          <Text style={styles.buttonText}>
+            {permission.canAskAgain ? 'Permitir câmera' : 'Abrir Ajustes'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setScreen('sync')} style={{ marginTop: 20 }}>
+          <Text style={{ color: 'white' }}>Voltar</Text>
+        </TouchableOpacity>
       </View>
     )
   }
@@ -261,6 +298,9 @@ const styles = StyleSheet.create({
   syncContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
   syncEventName: { color: 'white', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   syncStatus: { color: '#00C896', marginVertical: 20 },
+  permissionContainer: { flex: 1, backgroundColor: '#0B1F3A', justifyContent: 'center', alignItems: 'center', padding: 30 },
+  permissionTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginTop: 18 },
+  permissionText: { color: '#D1D5DB', fontSize: 16, textAlign: 'center', marginVertical: 16, lineHeight: 24 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', padding: 20, justifyContent: 'space-between' },
   viewfinder: { width: 250, height: 250, borderWidth: 2, borderColor: '#00C896', alignSelf: 'center', borderRadius: 20, marginTop: '30%' },
   resultCard: { padding: 30, borderRadius: 20, alignItems: 'center', position: 'absolute', top: '30%', left: 20, right: 20 },

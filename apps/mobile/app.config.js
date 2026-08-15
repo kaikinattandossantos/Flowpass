@@ -23,5 +23,13 @@ module.exports = {
   web: {
     favicon: './assets/favicon.png',
   },
-  plugins: ['expo-sqlite'],
+  plugins: [
+    'expo-sqlite',
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'Permita que o FlowPass use a câmera para ler credenciais em QR Code.',
+      },
+    ],
+  ],
 }
