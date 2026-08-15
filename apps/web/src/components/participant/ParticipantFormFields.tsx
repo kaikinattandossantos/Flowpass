@@ -67,7 +67,8 @@ export function ParticipantFormFields({
             ) : field.type === 'multi_select' ? (
               <div className="space-y-2">
                 {field.options?.map((opt) => {
-                  const current = Array.isArray(formData[field.id]) ? formData[field.id] : []
+                  const rawValue = formData[field.id]
+                  const current: string[] = Array.isArray(rawValue) ? rawValue : []
                   const checked = current.includes(opt)
 
                   return (

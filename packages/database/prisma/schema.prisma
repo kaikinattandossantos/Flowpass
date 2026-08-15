@@ -85,6 +85,7 @@ model Category {
   color              String?
   registrations      Registration[]
   default_for_links  RegistrationLink[]
+  default_for_forms  RegistrationForm[]
   access_points      AccessPointCategory[]
 }
 
@@ -110,14 +111,17 @@ model RegistrationLink {
 }
 
 model AccessPoint {
-  id          String                @id @default(uuid())
-  event_id    String
-  event       Event                 @relation(fields: [event_id], references: [id])
-  name        String
-  description String?
-  active      Boolean               @default(true)
-  created_at  DateTime              @default(now())
-  categories  AccessPointCategory[]
+  id                    String                @id @default(uuid())
+  event_id              String
+  event                 Event                 @relation(fields: [event_id], references: [id])
+  name                  String
+  description           String?
+  active                Boolean               @default(true)
+  public_id             String                @unique
+  allows_all_categories Boolean               @default(true)
+  created_at            DateTime              @default(now())
+  categories            AccessPointCategory[]
+  checkins              CheckIn[]
 }
 
 model AccessPointCategory {
@@ -135,11 +139,23 @@ model RegistrationForm {
   event               Event                  @relation(fields: [event_id], references: [id], onDelete: Cascade)
   name                String
   public_id           String                 @unique
+  slug                String?                @unique
   status              RegistrationFormStatus @default(draft)
   structural_config   Json
   field_layout        Json?
   registration_limit  Int?
   redirect_url        String?
+  success_behavior    SuccessBehavior        @default(message)
+  success_title       String?
+  success_message     String?
+  redirect_delay      Int?
+  default_category_id String?
+  default_category    Category?              @relation(fields: [default_category_id], references: [id], onDelete: SetNull)
+  appearance          Json?
+  published_appearance Json?
+  public_title        String?
+  public_description  String?
+  submit_button_text  String?
   created_at          DateTime               @default(now())
   updated_at          DateTime               @updatedAt
   form_fields         FormField[]
@@ -147,6 +163,12 @@ model RegistrationForm {
 
   @@index([event_id])
   @@map("registration_forms")
+}
+
+enum SuccessBehavior {
+  message
+  message_redirect
+  redirect
 }
 
 enum RegistrationFormStatus {
@@ -239,6 +261,8 @@ model CheckIn {
   registration    Registration @relation(fields: [registration_id], references: [id])
   operator_id     String?
   operator        Operator?    @relation(fields: [operator_id], references: [id])
+  access_point_id String?
+  access_point    AccessPoint? @relation(fields: [access_point_id], references: [id], onDelete: SetNull)
   device_id       String?
   checked_at      DateTime     @default(now())
   synced_at       DateTime?

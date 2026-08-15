@@ -1,18 +1,10 @@
-import type { User } from '@/store/auth'
+import type { Role, User } from '@/store/auth'
 
-export function getHomeForRole(role: User['role']) {
-  return role === 'superadmin' ? '/admin' : '/dashboard'
+export type { User }
+
+export function getHomeForRole(role: Role) {
+  if (role === 'super_admin') return '/admin/companies'
+  return '/dashboard'
 }
 
-export function getStoredUser(): User | null {
-  if (typeof window === 'undefined') return null
-
-  const raw = localStorage.getItem('user')
-  if (!raw) return null
-
-  try {
-    return JSON.parse(raw) as User
-  } catch {
-    return null
-  }
-}
+export { getStoredUser } from '@/store/auth'

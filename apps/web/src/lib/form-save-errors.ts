@@ -1,6 +1,7 @@
 import axios from 'axios'
+import { isAxiosNetworkFailure, networkFailureMessage } from '@/lib/form-save-log'
 
-export type FormSavePhase = 'field-delete' | 'field-create' | 'field-update' | 'form-settings' | 'reload'
+export type FormSavePhase = 'field-delete' | 'field-create' | 'field-update' | 'form-settings' | 'builder-save' | 'reload'
 
 function readApiMessage(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null
@@ -19,9 +20,14 @@ export function resolveFormSaveError(err: unknown, phase: FormSavePhase): string
         status: err.response?.status,
         data: err.response?.data,
         url: err.config?.url,
-        method: err.config?.method
+        method: err.config?.method,
+        code: err.code
       })
     }
+  }
+
+  if (isAxiosNetworkFailure(err)) {
+    return networkFailureMessage()
   }
 
   const apiMessage = axios.isAxiosError(err) ? readApiMessage(err.response?.data) : null
@@ -42,6 +48,9 @@ export function resolveFormSaveError(err: unknown, phase: FormSavePhase): string
     if (apiMessage.includes('Nome deve permanecer')) {
       return apiMessage
     }
+    if (apiMessage.includes('link personalizado')) {
+      return apiMessage
+    }
     return apiMessage
   }
 
@@ -51,7 +60,7 @@ export function resolveFormSaveError(err: unknown, phase: FormSavePhase): string
   if (phase === 'field-create' || phase === 'field-update') {
     return 'Não foi possível salvar um campo personalizado. Revise a configuração e tente novamente.'
   }
-  if (phase === 'form-settings') {
+  if (phase === 'form-settings' || phase === 'builder-save') {
     return 'Não foi possível salvar as configurações do formulário.'
   }
   if (phase === 'reload') {

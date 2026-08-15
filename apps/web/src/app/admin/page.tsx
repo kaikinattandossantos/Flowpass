@@ -32,7 +32,7 @@ export default function AdminPage() {
       return
     }
 
-    if (user.role !== 'superadmin') {
+    if (user.role !== 'super_admin') {
       router.push(getHomeForRole(user.role))
       return
     }

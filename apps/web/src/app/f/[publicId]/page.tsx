@@ -5,10 +5,15 @@ import { useParams } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { API_URL } from '@/lib/api'
-import { FormField, fieldTypeLabel } from '@/lib/form-field-types'
+import { FormField } from '@/lib/form-field-types'
 import { UnifiedFormField } from '@/lib/field-layout'
 import { parseStructuralConfig, type StructuralConfig } from '@/lib/structural-config'
-import { DynamicFormFields } from '@/components/form-builder/DynamicFormFields'
+import { getPageBackgroundStyle, isLegacyAppearance, parseFormAppearance } from '@/lib/form-appearance'
+import { normalizeAppearance } from '@/lib/form-design'
+import type { FormDesign } from '@/lib/form-design'
+import { parseSuccessBehavior, type SuccessBehavior } from '@/lib/success-behavior'
+import { PublicRegistrationFormView } from '@/components/form-builder/PublicRegistrationFormView'
+import { PublicFormSuccessView } from '@/components/form-builder/PublicFormSuccessView'
 
 interface PublicFormData {
   event: {
@@ -24,6 +29,17 @@ interface PublicFormData {
     status: string
     structural_config: StructuralConfig
     redirect_url: string | null
+    success_behavior: SuccessBehavior
+    success_title: string | null
+    success_message: string | null
+    redirect_delay: number | null
+    public_title: string | null
+    public_description: string | null
+    submit_button_text: string | null
+    appearance: unknown
+    design?: FormDesign | null
+    design_legacy?: boolean
+    raw_appearance?: unknown
   }
   categories: Array<{ id: string; name: string }>
   unified_fields: UnifiedFormField[]
@@ -33,27 +49,12 @@ interface PublicFormData {
   block_message: string | null
 }
 
-function CustomFieldBlock({
-  field,
-  formFields,
-  formData,
-  onChange
-}: {
-  field: Extract<UnifiedFormField, { kind: 'custom' }>
-  formFields: FormField[]
-  formData: Record<string, string | string[] | boolean>
-  onChange: (fieldId: string, value: string | string[] | boolean) => void
-}) {
-  const fullField = formFields.find((item) => item.id === field.id)
-  if (!fullField) return null
-
-  return (
-    <DynamicFormFields
-      fields={[fullField]}
-      values={formData}
-      onChange={onChange}
-    />
-  )
+interface SuccessState {
+  behavior: SuccessBehavior
+  title: string | null
+  message: string | null
+  redirectUrl: string | null
+  redirectDelay: number | null
 }
 
 export default function PublicFormPage() {
@@ -63,7 +64,7 @@ export default function PublicFormPage() {
   const [data, setData] = useState<PublicFormData | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess] = useState<SuccessState | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<Record<string, string | string[] | boolean>>({})
@@ -89,7 +90,7 @@ export default function PublicFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!data?.can_submit) return
+    if (!data?.can_submit || success) return
 
     setSubmitting(true)
     setApiError(null)
@@ -104,13 +105,21 @@ export default function PublicFormPage() {
         form_data: formData
       })
 
+      const behavior = parseSuccessBehavior(res.data.success_behavior ?? data.form.success_behavior)
       const redirectUrl = res.data.redirect_url as string | null
-      if (redirectUrl) {
-        window.location.href = redirectUrl
+
+      if (behavior === 'redirect' && redirectUrl) {
+        window.location.assign(redirectUrl)
         return
       }
 
-      setSuccess(true)
+      setSuccess({
+        behavior,
+        title: res.data.success_title ?? data.form.success_title,
+        message: res.data.success_message ?? data.form.success_message,
+        redirectUrl,
+        redirectDelay: res.data.redirect_delay ?? data.form.redirect_delay
+      })
     } catch (err: unknown) {
       const message = axios.isAxiosError(err)
         ? err.response?.data?.message ?? 'Erro ao enviar inscrição'
@@ -125,114 +134,91 @@ export default function PublicFormPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>
   if (!data) return <div className="min-h-screen flex items-center justify-center">Formulário não encontrado</div>
 
+  const rawAppearance = data.form.raw_appearance ?? data.form.appearance
+  const design = data.form.design ?? normalizeAppearance(rawAppearance)
+  const legacy = data.form.design_legacy ?? isLegacyAppearance(rawAppearance)
+  const appearance = legacy ? parseFormAppearance(rawAppearance) : parseFormAppearance(rawAppearance)
+  const formTitle = data.form.public_title?.trim() || data.form.name
+  const formDescription = data.form.public_description?.trim() || data.event.description
+  const submitLabel = data.form.submit_button_text?.trim() || 'Finalizar inscrição'
+
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-xl p-8 text-center">
-          <h1 className="text-2xl font-bold text-[#0B1F3A] mb-2">Inscrição enviada</h1>
-          <p className="text-gray-600">Sua inscrição foi registrada com sucesso.</p>
-        </div>
-      </div>
+      <PublicFormSuccessView
+        appearance={appearance}
+        design={design}
+        rawAppearance={rawAppearance}
+        successBehavior={success.behavior}
+        successTitle={success.title}
+        successMessage={success.message}
+        redirectUrl={success.redirectUrl}
+        redirectDelay={success.redirectDelay}
+      />
     )
   }
 
-  const renderUnifiedField = (field: UnifiedFormField) => {
-    if (field.kind === 'custom') {
-      return (
-        <CustomFieldBlock
-          key={field.id}
-          field={field}
-          formFields={data.form_fields}
-          formData={formData}
-          onChange={(fieldId, value) => setFormData((prev) => ({ ...prev, [fieldId]: value }))}
-        />
-      )
-    }
-
-    const { key, label, required } = field
-
-    if (key === 'category') {
-      return (
-        <div key={key}>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-            required={required}
-          >
-            {data.categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        </div>
-      )
-    }
-
-    const inputType = key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'
-    const valueKey = key as 'name' | 'email' | 'phone' | 'cpf'
-
+  if (design) {
     return (
-      <div key={key}>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-        <input
-          type={inputType}
-          required={required}
-          value={baseInfo[valueKey]}
-          onChange={(e) => setBaseInfo({ ...baseInfo, [valueKey]: e.target.value })}
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
+      <div className="min-h-screen">
+        <PublicRegistrationFormView
+          rawAppearance={rawAppearance}
+          design={design}
+          eventName={data.event.name}
+          eventStartAt={data.event.start_at}
+          eventLocation={data.event.location}
+          formTitle={formTitle}
+          formDescription={formDescription || undefined}
+          submitLabel={submitLabel}
+          appearance={appearance}
+          unifiedFields={data.unified_fields}
+          formFields={data.form_fields}
+          categories={data.categories}
+          canSubmit={data.can_submit}
+          blockMessage={data.block_message}
+          formData={formData}
+          baseInfo={baseInfo}
+          selectedCategory={selectedCategory}
+          onFieldChange={(fieldId, value) => setFormData((prev) => ({ ...prev, [fieldId]: value }))}
+          onBaseInfoChange={(key, value) => setBaseInfo((prev) => ({ ...prev, [key]: value }))}
+          onCategoryChange={setSelectedCategory}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          apiError={apiError}
         />
-        <p className="text-xs text-gray-400 mt-1">{fieldTypeLabel(key === 'cpf' ? 'cpf' : key === 'email' ? 'email' : key === 'phone' ? 'phone' : 'text')}</p>
       </div>
     )
   }
+
+  const pageStyle = legacy
+    ? { backgroundColor: appearance.background_color }
+    : getPageBackgroundStyle(appearance)
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
-        <div className="bg-[#0B1F3A] p-8 text-white">
-          <p className="text-sm text-[#00C896] mb-1">{data.event.name}</p>
-          <h1 className="text-3xl font-bold mb-2">{data.form.name}</h1>
-          {data.event.description && <p className="text-gray-300">{data.event.description}</p>}
-          <div className="mt-4 flex flex-wrap gap-4 text-sm">
-            <span>{new Date(data.event.start_at).toLocaleDateString('pt-BR')}</span>
-            {data.event.location && <span>{data.event.location}</span>}
-          </div>
-        </div>
-
-        {!data.can_submit && (
-          <div className="p-8">
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
-              <p className="font-semibold">Inscrições encerradas</p>
-              <p>{data.block_message ?? 'Este formulário não está aceitando inscrições no momento.'}</p>
-            </div>
-          </div>
-        )}
-
-        {data.can_submit && (
-          <form onSubmit={handleSubmit} className="p-8 space-y-6">
-            {apiError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {apiError}
-              </div>
-            )}
-
-            <div className="space-y-6">
-              {data.unified_fields.map(renderUnifiedField)}
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-[#00C896] hover:bg-[#00a876] text-white font-bold py-3 rounded-lg transition disabled:opacity-50"
-            >
-              {submitting ? 'Enviando...' : 'Enviar inscrição'}
-            </button>
-          </form>
-        )}
-      </div>
+    <div className="min-h-screen py-8 px-4 md:py-12" style={pageStyle}>
+      <PublicRegistrationFormView
+        rawAppearance={rawAppearance}
+        eventName={data.event.name}
+        eventStartAt={data.event.start_at}
+        eventLocation={data.event.location}
+        formTitle={formTitle}
+        formDescription={formDescription || undefined}
+        submitLabel={submitLabel}
+        appearance={appearance}
+        unifiedFields={data.unified_fields}
+        formFields={data.form_fields}
+        categories={data.categories}
+        canSubmit={data.can_submit}
+        blockMessage={data.block_message}
+        formData={formData}
+        baseInfo={baseInfo}
+        selectedCategory={selectedCategory}
+        onFieldChange={(fieldId, value) => setFormData((prev) => ({ ...prev, [fieldId]: value }))}
+        onBaseInfoChange={(key, value) => setBaseInfo((prev) => ({ ...prev, [key]: value }))}
+        onCategoryChange={setSelectedCategory}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+        apiError={apiError}
+      />
     </div>
   )
 }

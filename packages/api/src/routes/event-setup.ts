@@ -3,6 +3,7 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import { prisma } from '../../../database'
 import { requireEventInCompany, requireRoles } from '../lib/auth'
+import { generatePublicId } from '../utils/public-id'
 import { slugify } from '../utils/slug'
 
 export async function eventSetupRoutes(app: FastifyInstance) {
@@ -173,7 +174,46 @@ export async function eventSetupRoutes(app: FastifyInstance) {
     return reply.status(204).send()
   })
 
-  // --- Access Points ---
+  // --- Access Points (links de credenciamento) ---
+
+  const accessPointInclude = {
+    categories: {
+      include: { category: { select: { id: true, name: true } } }
+    },
+    _count: { select: { checkins: true } }
+  } as const
+
+  function serializeAccessPoint(point: {
+    id: string
+    event_id: string
+    name: string
+    description: string | null
+    active: boolean
+    public_id: string
+    allows_all_categories: boolean
+    created_at: Date
+    categories: Array<{ category: { id: string; name: string } }>
+    _count: { checkins: number }
+  }) {
+    const categoryNames = point.categories.map((entry) => entry.category.name)
+    return {
+      id: point.id,
+      event_id: point.event_id,
+      name: point.name,
+      description: point.description,
+      active: point.active,
+      public_id: point.public_id,
+      allows_all_categories: point.allows_all_categories,
+      categories: point.categories.map((entry) => entry.category),
+      categories_label: point.allows_all_categories
+        ? 'Todas as categorias'
+        : categoryNames.length > 0
+          ? categoryNames.join(', ')
+          : 'Nenhuma categoria configurada',
+      checkin_count: point._count.checkins,
+      created_at: point.created_at
+    }
+  }
 
   app.withTypeProvider<ZodTypeProvider>().get('/events/:id/access-points', {
     preHandler: [requireRoles('admin', 'viewer')],
@@ -183,15 +223,13 @@ export async function eventSetupRoutes(app: FastifyInstance) {
     const ctx = await requireEventInCompany(request, reply, event_id)
     if (!ctx) return
 
-    return prisma.accessPoint.findMany({
+    const points = await prisma.accessPoint.findMany({
       where: { event_id },
-      include: {
-        categories: {
-          include: { category: { select: { id: true, name: true } } }
-        }
-      },
+      include: accessPointInclude,
       orderBy: { name: 'asc' }
     })
+
+    return points.map(serializeAccessPoint)
   })
 
   app.withTypeProvider<ZodTypeProvider>().post('/events/:id/access-points', {
@@ -202,6 +240,7 @@ export async function eventSetupRoutes(app: FastifyInstance) {
         name: z.string().min(1),
         description: z.string().optional(),
         active: z.boolean().default(true),
+        allows_all_categories: z.boolean().default(true),
         category_ids: z.array(z.string().uuid()).default([])
       })
     }
@@ -210,9 +249,12 @@ export async function eventSetupRoutes(app: FastifyInstance) {
     const ctx = await requireEventInCompany(request, reply, event_id)
     if (!ctx) return
 
-    const { name, description, active, category_ids } = request.body
+    const { name, description, active, allows_all_categories, category_ids } = request.body
 
-    if (category_ids.length > 0) {
+    if (!allows_all_categories) {
+      if (category_ids.length === 0) {
+        return reply.status(400).send({ message: 'Selecione ao menos uma categoria permitida' })
+      }
       const count = await prisma.category.count({
         where: { event_id, id: { in: category_ids } }
       })
@@ -221,20 +263,24 @@ export async function eventSetupRoutes(app: FastifyInstance) {
       }
     }
 
-    return prisma.accessPoint.create({
+    const point = await prisma.accessPoint.create({
       data: {
         event_id,
         name,
         description,
         active,
-        categories: {
-          create: category_ids.map((category_id) => ({ category_id }))
-        }
+        public_id: generatePublicId(),
+        allows_all_categories,
+        categories: allows_all_categories
+          ? undefined
+          : {
+              create: category_ids.map((category_id) => ({ category_id }))
+            }
       },
-      include: {
-        categories: { include: { category: { select: { id: true, name: true } } } }
-      }
+      include: accessPointInclude
     })
+
+    return serializeAccessPoint(point)
   })
 
   app.withTypeProvider<ZodTypeProvider>().patch('/events/:id/access-points/:pointId', {
@@ -245,6 +291,7 @@ export async function eventSetupRoutes(app: FastifyInstance) {
         name: z.string().min(1).optional(),
         description: z.string().optional(),
         active: z.boolean().optional(),
+        allows_all_categories: z.boolean().optional(),
         category_ids: z.array(z.string().uuid()).optional()
       })
     }
@@ -254,33 +301,51 @@ export async function eventSetupRoutes(app: FastifyInstance) {
     if (!ctx) return
 
     const point = await prisma.accessPoint.findFirst({ where: { id: pointId, event_id } })
-    if (!point) return reply.status(404).send({ message: 'Ponto de acesso não encontrado' })
+    if (!point) return reply.status(404).send({ message: 'Ponto de credenciamento não encontrado' })
 
-    const { category_ids, ...data } = request.body
+    const { category_ids, allows_all_categories, ...data } = request.body
+    const nextAllowsAll = allows_all_categories ?? point.allows_all_categories
+    let nextCategoryIds: string[] | undefined
 
-    if (category_ids !== undefined) {
-      const count = await prisma.category.count({
-        where: { event_id, id: { in: category_ids } }
-      })
-      if (count !== category_ids.length) {
-        return reply.status(400).send({ message: 'Uma ou mais categorias são inválidas' })
+    if (!nextAllowsAll) {
+      nextCategoryIds = category_ids ?? (
+        await prisma.accessPointCategory.findMany({
+          where: { access_point_id: pointId },
+          select: { category_id: true }
+        })
+      ).map((entry) => entry.category_id)
+
+      if (nextCategoryIds.length === 0) {
+        return reply.status(400).send({ message: 'Selecione ao menos uma categoria permitida' })
       }
 
-      await prisma.accessPointCategory.deleteMany({ where: { access_point_id: pointId } })
-      if (category_ids.length > 0) {
-        await prisma.accessPointCategory.createMany({
-          data: category_ids.map((category_id) => ({ access_point_id: pointId, category_id }))
-        })
+      const count = await prisma.category.count({
+        where: { event_id, id: { in: nextCategoryIds } }
+      })
+      if (count !== nextCategoryIds.length) {
+        return reply.status(400).send({ message: 'Uma ou mais categorias são inválidas' })
       }
     }
 
-    return prisma.accessPoint.update({
+    if (category_ids !== undefined || allows_all_categories !== undefined) {
+      await prisma.accessPointCategory.deleteMany({ where: { access_point_id: pointId } })
+    }
+
+    const updated = await prisma.accessPoint.update({
       where: { id: pointId },
-      data,
-      include: {
-        categories: { include: { category: { select: { id: true, name: true } } } }
-      }
+      data: {
+        ...data,
+        ...(allows_all_categories !== undefined && { allows_all_categories: nextAllowsAll }),
+        ...(!nextAllowsAll && nextCategoryIds && {
+          categories: {
+            create: nextCategoryIds.map((category_id) => ({ category_id }))
+          }
+        })
+      },
+      include: accessPointInclude
     })
+
+    return serializeAccessPoint(updated)
   })
 
   app.withTypeProvider<ZodTypeProvider>().delete('/events/:id/access-points/:pointId', {
@@ -294,7 +359,7 @@ export async function eventSetupRoutes(app: FastifyInstance) {
     if (!ctx) return
 
     const point = await prisma.accessPoint.findFirst({ where: { id: pointId, event_id } })
-    if (!point) return reply.status(404).send({ message: 'Ponto de acesso não encontrado' })
+    if (!point) return reply.status(404).send({ message: 'Ponto de credenciamento não encontrado' })
 
     await prisma.accessPoint.delete({ where: { id: pointId } })
     return reply.status(204).send()

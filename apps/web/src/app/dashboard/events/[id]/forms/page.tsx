@@ -8,6 +8,19 @@ import { API_URL, authHeaders } from '@/lib/api'
 import { canManageEvents, getStoredUser } from '@/store/auth'
 import { publicFormUrl, type RegistrationFormSummary } from '@/lib/registration-form-types'
 import { formStatusLabel } from '@/lib/structural-config'
+import { ActionMenu } from '@/components/dashboard/event-page/ActionMenu'
+import { EmptyState } from '@/components/dashboard/event-page/EmptyState'
+import { EventPageLayout } from '@/components/dashboard/event-page/EventPageLayout'
+import { Modal } from '@/components/dashboard/event-page/Modal'
+import { PrimaryButton } from '@/components/dashboard/event-page/PrimaryButton'
+import { ResourceCard } from '@/components/dashboard/event-page/ResourceCard'
+import { StatusBadge } from '@/components/dashboard/event-page/StatusBadge'
+
+function statusVariant(status: RegistrationFormSummary['status']) {
+  if (status === 'active') return 'success' as const
+  if (status === 'draft') return 'warning' as const
+  return 'neutral' as const
+}
 
 export default function EventFormsPage() {
   const params = useParams()
@@ -50,7 +63,8 @@ export default function EventFormsPage() {
     })()
   }, [eventId, router, load])
 
-  const handleCreate = async () => {
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!newFormName.trim()) {
       toast.error('Informe o nome do formulário')
       return
@@ -78,7 +92,7 @@ export default function EventFormsPage() {
 
   const handleCopyLink = async (form: RegistrationFormSummary) => {
     try {
-      await navigator.clipboard.writeText(publicFormUrl(form.public_id))
+      await navigator.clipboard.writeText(publicFormUrl(form))
       toast.success('Link copiado')
     } catch {
       toast.error('Não foi possível copiar o link')
@@ -111,116 +125,136 @@ export default function EventFormsPage() {
     }
   }
 
-  if (loading) return <div className="p-8">Carregando...</div>
-
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto">
-        <button
-          onClick={() => router.push(`/dashboard/events/${eventId}/participants`)}
-          className="text-[#00C896] mb-4"
-        >
-          ← Voltar aos participantes
-        </button>
-
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-[#0B1F3A]">Formulários</h1>
-            <p className="text-gray-600 text-sm mt-1">
-              Crie formulários diferentes para organizar as inscrições do evento.
-            </p>
-          </div>
-          {canEdit && (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="bg-[#00C896] text-white px-4 py-2 rounded-lg text-sm shrink-0"
-            >
-              + Novo formulário
-            </button>
-          )}
-        </div>
-
-        {showCreate && (
-          <div className="bg-white rounded-lg shadow p-4 mb-6 space-y-3">
-            <label className="block text-sm font-medium">Nome do formulário</label>
-            <input
-              value={newFormName}
-              onChange={(e) => setNewFormName(e.target.value)}
-              placeholder="Ex: Participantes"
-              className="w-full px-3 py-2 border rounded-lg"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => void handleCreate()}
-                disabled={creating}
-                className="bg-[#00C896] text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
-              >
-                {creating ? 'Criando...' : 'Continuar'}
-              </button>
-              <button
-                onClick={() => { setShowCreate(false); setNewFormName('') }}
-                className="px-4 py-2 border rounded-lg text-sm"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-4">
-          {forms.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-600">
-              Nenhum formulário cadastrado.
-            </div>
-          ) : (
-            forms.map((form) => (
-              <div key={form.id} className="bg-white rounded-lg shadow p-5">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-[#0B1F3A]">{form.name}</h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {form.field_count} campos · {form.response_count} respostas ·{' '}
-                      <span className={
-                        form.status === 'active'
-                          ? 'text-green-700'
-                          : form.status === 'draft'
-                            ? 'text-amber-700'
-                            : 'text-gray-500'
-                      }>
-                        {formStatusLabel(form.status)}
+    <>
+      <EventPageLayout
+        title="Formulários"
+        description="Crie e gerencie os formulários utilizados para inscrição no evento."
+        loading={loading}
+        action={
+          canEdit ? (
+            <PrimaryButton onClick={() => setShowCreate(true)}>+ Novo formulário</PrimaryButton>
+          ) : undefined
+        }
+      >
+        {forms.length === 0 ? (
+          <EmptyState
+            title="Nenhum formulário cadastrado"
+            description="Crie formulários para receber inscrições públicas com links próprios."
+            action={
+              canEdit ? (
+                <PrimaryButton onClick={() => setShowCreate(true)}>+ Novo formulário</PrimaryButton>
+              ) : undefined
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {forms.map((form) => (
+              <ResourceCard key={form.id}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg font-semibold text-[#0B1F3A]">{form.name}</h2>
+                      <StatusBadge
+                        label={formStatusLabel(form.status)}
+                        variant={statusVariant(form.status)}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                      <span>
+                        Categoria: {form.default_category?.name ?? 'Nenhuma'}
                       </span>
-                    </p>
+                      <span>
+                        Inscrições: {form.active_registration_count ?? form.response_count}
+                      </span>
+                      {form.registration_limit !== null && (
+                        <span>Limite: {form.registration_limit}</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/dashboard/events/${eventId}/forms/${form.id}`)}
+                        className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                      >
+                        Editar
+                      </button>
+                    )}
                     <button
+                      type="button"
                       onClick={() => void handleCopyLink(form)}
-                      className="px-3 py-1.5 border border-[#00C896] text-[#00C896] rounded-lg text-sm"
+                      className="rounded-lg border border-[#00C896] px-3 py-1.5 text-sm text-[#00C896] hover:bg-green-50"
                     >
                       Copiar link
                     </button>
-                    {canEdit && (
-                      <>
-                        <button
-                          onClick={() => router.push(`/dashboard/events/${eventId}/forms/${form.id}`)}
-                          className="px-3 py-1.5 border rounded-lg text-sm"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => void handleToggleStatus(form)}
-                          className="px-3 py-1.5 border rounded-lg text-sm text-gray-600"
-                        >
-                          {form.status === 'active' ? 'Desativar' : form.status === 'draft' ? 'Publicar' : 'Ativar'}
-                        </button>
-                      </>
-                    )}
+                    <ActionMenu
+                      items={[
+                        {
+                          label: 'Visualizar',
+                          onClick: () => window.open(publicFormUrl(form), '_blank')
+                        },
+                        {
+                          label:
+                            form.status === 'active'
+                              ? 'Desativar'
+                              : form.status === 'draft'
+                                ? 'Publicar'
+                                : 'Ativar',
+                          onClick: () => void handleToggleStatus(form),
+                          hidden: !canEdit
+                        }
+                      ]}
+                    />
                   </div>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
+              </ResourceCard>
+            ))}
+          </div>
+        )}
+      </EventPageLayout>
+
+      <Modal
+        open={showCreate}
+        title="Novo formulário"
+        onClose={() => {
+          setShowCreate(false)
+          setNewFormName('')
+        }}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreate(false)
+                setNewFormName('')
+              }}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm"
+            >
+              Cancelar
+            </button>
+            <PrimaryButton form="create-form" type="submit" disabled={creating}>
+              {creating ? 'Criando...' : 'Continuar'}
+            </PrimaryButton>
+          </>
+        }
+      >
+        <form id="create-form" onSubmit={handleCreate} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Nome do formulário *
+            </label>
+            <input
+              required
+              value={newFormName}
+              onChange={(e) => setNewFormName(e.target.value)}
+              placeholder="Ex: Inscrição Público Geral"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-[#00C896] focus:ring-2 focus:ring-[#00C896]/20"
+            />
+          </div>
+        </form>
+      </Modal>
+    </>
   )
 }

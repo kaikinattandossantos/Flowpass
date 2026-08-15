@@ -69,7 +69,11 @@ export default function TicketPage() {
         eventName={ticket.event.name}
         categoryName={ticket.category_name}
         startAt={ticket.event.start_at}
-        address={{ location: ticket.event.location }}
+        address={{
+          street: '',
+          number: '',
+          location: ticket.event.location
+        }}
         qrCodeUrl={ticket.qr_code_url}
         qrToken={ticket.qr_token}
         ticketUrl={ticketUrl}

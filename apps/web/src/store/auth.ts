@@ -3,7 +3,7 @@ import axios from 'axios'
 
 export type Role = 'super_admin' | 'admin' | 'viewer' | 'operator'
 
-interface User {
+export interface User {
   id: string
   name: string
   email: string
