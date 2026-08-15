@@ -22,6 +22,8 @@ interface SyncOptions {
 export function useCredentialSync(token: string | null, selectedEvent: EventSummary | null) {
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [lastAttempt, setLastAttempt] = useState<string | null>(null)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
   const syncInFlight = useRef(false)
@@ -37,10 +39,12 @@ export function useCredentialSync(token: string | null, selectedEvent: EventSumm
 
     syncInFlight.current = true
     setSyncing(true)
+    setLastAttempt(new Date().toLocaleTimeString('pt-BR'))
 
     try {
       const response = await axios.get(`${API_URL}/events/${selectedEvent.id}/sync`, {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 10_000,
       })
       await saveRegistrations(response.data)
 
@@ -48,16 +52,19 @@ export function useCredentialSync(token: string | null, selectedEvent: EventSumm
       if (unsynced.length > 0) {
         await axios.post(`${API_URL}/events/${selectedEvent.id}/checkins`, unsynced, {
           headers: { Authorization: `Bearer ${token}` },
+          timeout: 10_000,
         })
         await markAsSynced(unsynced.map((checkin) => checkin.uuid))
       }
 
       await refreshPendingCount()
       setLastSync(new Date().toLocaleTimeString('pt-BR'))
+      setSyncError(null)
       if (!silent) Alert.alert('Sucesso', 'Dados sincronizados!')
       return true
     } catch {
       await refreshPendingCount()
+      setSyncError('Servidor indisponível; nova tentativa automática em até 30 segundos.')
       if (!silent) Alert.alert('Erro', 'Sem conexão com o servidor. Os check-ins continuam salvos no aparelho.')
       return false
     } finally {
@@ -80,21 +87,25 @@ export function useCredentialSync(token: string | null, selectedEvent: EventSumm
   }, [isConnected, selectedEvent, syncData, token])
 
   useEffect(() => {
-    if (!isConnected || pendingCount === 0 || !token || !selectedEvent) return
+    if (!token || !selectedEvent) return
 
     const interval = setInterval(() => {
-      void syncData({ silent: true })
+      void refreshPendingCount().then((pending) => {
+        if (pending.length > 0) void syncData({ silent: true })
+      })
     }, AUTO_SYNC_INTERVAL_MS)
 
     return () => clearInterval(interval)
-  }, [isConnected, pendingCount, selectedEvent, syncData, token])
+  }, [refreshPendingCount, selectedEvent, syncData, token])
 
   return {
     isConnected,
+    lastAttempt,
     lastSync,
     pendingCount,
     refreshPendingCount,
     syncData,
+    syncError,
     syncing,
   }
 }

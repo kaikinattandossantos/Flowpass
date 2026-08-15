@@ -23,7 +23,7 @@ export default function App() {
   const [password, setPassword] = useState('')
   const [events, setEvents] = useState<any[]>([])
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
-  const { isConnected, lastSync, pendingCount, refreshPendingCount, syncData, syncing } = useCredentialSync(token, selectedEvent)
+  const { isConnected, lastAttempt, lastSync, pendingCount, refreshPendingCount, syncData, syncError, syncing } = useCredentialSync(token, selectedEvent)
 
   useEffect(() => {
     initDatabase()
@@ -171,6 +171,8 @@ export default function App() {
           <Text style={[styles.connectionStatus, { color: isConnected ? '#00C896' : '#FFB800' }]}>
             {isConnected ? 'Online' : 'Offline'} · {pendingCount} check-in(s) pendente(s)
           </Text>
+          {lastAttempt && <Text style={styles.syncAttempt}>Última tentativa: {lastAttempt}</Text>}
+          {syncError && <Text style={styles.syncError}>{syncError}</Text>}
           
           <TouchableOpacity onPress={() => void syncData()} style={[styles.button, {width: '100%', marginBottom: 10}]}>
             <Text style={styles.buttonText}>{syncing ? 'Sincronizando...' : 'Sincronizar Agora'}</Text>
@@ -277,6 +279,8 @@ const styles = StyleSheet.create({
   syncEventName: { color: 'white', fontSize: 24, fontWeight: 'bold', textAlign: 'center' },
   syncStatus: { color: '#00C896', marginVertical: 20 },
   connectionStatus: { fontSize: 14, fontWeight: 'bold', marginBottom: 20 },
+  syncAttempt: { color: '#D1D5DB', fontSize: 13, marginBottom: 8 },
+  syncError: { color: '#FFB800', fontSize: 13, textAlign: 'center', marginBottom: 16 },
   permissionContainer: { flex: 1, backgroundColor: '#0B1F3A', justifyContent: 'center', alignItems: 'center', padding: 30 },
   permissionTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginTop: 18 },
   permissionText: { color: '#D1D5DB', fontSize: 16, textAlign: 'center', marginVertical: 16, lineHeight: 24 },
