@@ -23,75 +23,101 @@ import {
   countActiveRegistrationsForForm,
   getRegistrationFormAvailability
 } from '../utils/registration-form-limit'
+import { findPublicRegistrationForm } from '../utils/public-form-lookup'
+import { parseFormAppearance } from '../utils/form-appearance'
+import { getPublicAppearanceRaw, normalizeAppearance, shouldUseLegacyRenderer } from '../utils/form-design'
+
+const publicFormIdentifier = z.string().min(3).max(80)
+
+function serializePublicFormPayload(
+  form: NonNullable<Awaited<ReturnType<typeof findPublicRegistrationForm>>>,
+  availability: Awaited<ReturnType<typeof getRegistrationFormAvailability>>,
+  activeCount: number
+) {
+  const structuralConfig = parseStructuralConfig(form.structural_config)
+  const fieldLayout = parseFieldLayout(form.field_layout, structuralConfig, form.form_fields)
+  const unifiedFields = resolveUnifiedFields(structuralConfig, form.form_fields, fieldLayout)
+  const rawAppearance = getPublicAppearanceRaw(form)
+  const design = normalizeAppearance(rawAppearance)
+  const legacy = shouldUseLegacyRenderer(rawAppearance)
+  const appearance = legacy ? parseFormAppearance(rawAppearance) : null
+
+  return {
+    event: {
+      id: form.event.id,
+      name: form.event.name,
+      description: form.event.description,
+      start_at: form.event.start_at,
+      end_at: form.event.end_at,
+      location: form.event.location,
+      status: form.event.status
+    },
+    form: {
+      id: form.id,
+      name: form.name,
+      status: form.status,
+      public_id: form.public_id,
+      slug: form.slug,
+      structural_config: structuralConfig,
+      field_layout: fieldLayout,
+      redirect_url: form.redirect_url,
+      success_behavior: form.success_behavior,
+      success_title: form.success_title,
+      success_message: form.success_message,
+      redirect_delay: form.redirect_delay,
+      registration_limit: form.registration_limit,
+      active_registration_count: activeCount,
+      default_category_id: form.default_category_id,
+      public_title: form.public_title,
+      public_description: form.public_description,
+      submit_button_text: form.submit_button_text,
+      appearance,
+      design,
+      design_legacy: legacy,
+      raw_appearance: rawAppearance
+    },
+    unified_fields: unifiedFields,
+    categories: form.event.categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      color: c.color
+    })),
+    form_fields: form.form_fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      type: field.type,
+      required: field.required,
+      enabled: field.enabled,
+      placeholder: field.placeholder,
+      options: Array.isArray(field.options) ? field.options : null,
+      order: field.order
+    })),
+    can_submit: availability.can_submit,
+    block_reason: availability.block_reason ?? null,
+    block_message: availability.message ?? null
+  }
+}
 
 export async function publicFormRoutes(app: FastifyInstance) {
   app.withTypeProvider<ZodTypeProvider>().get('/public/forms/:publicId', {
-    schema: { params: z.object({ publicId: z.string().min(16).max(64) }) }
+    schema: { params: z.object({ publicId: publicFormIdentifier }) }
   }, async (request, reply) => {
-    const form = await prisma.registrationForm.findUnique({
-      where: { public_id: request.params.publicId },
-      include: {
-        event: { include: { company: true, categories: { orderBy: { name: 'asc' } } } },
-        form_fields: { orderBy: { order: 'asc' } }
-      }
-    })
+    const form = await findPublicRegistrationForm(request.params.publicId)
 
     if (!form) {
       return reply.status(404).send({ message: 'Formulário não encontrado' })
     }
 
-    const structuralConfig = parseStructuralConfig(form.structural_config)
-    const fieldLayout = parseFieldLayout(form.field_layout, structuralConfig, form.form_fields)
-    const unifiedFields = resolveUnifiedFields(structuralConfig, form.form_fields, fieldLayout)
     const activeCount = await countActiveRegistrationsForForm(prisma, form.id)
     const availability = await getRegistrationFormAvailability(form, form.id, activeCount)
 
-    return {
-      event: {
-        id: form.event.id,
-        name: form.event.name,
-        description: form.event.description,
-        start_at: form.event.start_at,
-        end_at: form.event.end_at,
-        location: form.event.location,
-        status: form.event.status
-      },
-      form: {
-        id: form.id,
-        name: form.name,
-        status: form.status,
-        public_id: form.public_id,
-        structural_config: structuralConfig,
-        field_layout: fieldLayout,
-        redirect_url: form.redirect_url,
-        registration_limit: form.registration_limit,
-        active_registration_count: activeCount
-      },
-      unified_fields: unifiedFields,
-      categories: form.event.categories.map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        color: c.color
-      })),
-      form_fields: form.form_fields.map((field) => ({
-        id: field.id,
-        label: field.label,
-        type: field.type,
-        required: field.required,
-        placeholder: field.placeholder,
-        options: Array.isArray(field.options) ? field.options : null,
-        order: field.order
-      })),
-      can_submit: availability.can_submit,
-      block_reason: availability.block_reason ?? null,
-      block_message: availability.message ?? null
-    }
+    return serializePublicFormPayload(form, availability, activeCount)
   })
 
   app.withTypeProvider<ZodTypeProvider>().post('/public/forms/:publicId/registrations', {
     schema: {
-      params: z.object({ publicId: z.string().min(16).max(64) }),
+      params: z.object({ publicId: publicFormIdentifier }),
       body: z.object({
         category_id: z.string().uuid().optional(),
         name: z.string().optional(),
@@ -102,13 +128,7 @@ export async function publicFormRoutes(app: FastifyInstance) {
       })
     }
   }, async (request, reply) => {
-    const form = await prisma.registrationForm.findUnique({
-      where: { public_id: request.params.publicId },
-      include: {
-        event: { include: { company: true, categories: true } },
-        form_fields: { orderBy: { order: 'asc' } }
-      }
-    })
+    const form = await findPublicRegistrationForm(request.params.publicId)
 
     if (!form) {
       return reply.status(404).send({ message: 'Formulário não encontrado' })
@@ -123,13 +143,15 @@ export async function publicFormRoutes(app: FastifyInstance) {
     const structuralConfig = parseStructuralConfig(form.structural_config)
     const data = request.body
 
-    let categoryId: string | null = null
+    let categoryId: string | null = form.default_category_id ?? null
     if (structuralConfig.category.enabled && data.category_id) {
       const category = form.event.categories.find((c) => c.id === data.category_id)
       if (!category) {
         return reply.status(400).send({ message: 'Categoria inválida' })
       }
       categoryId = category.id
+    } else if (form.default_category_id) {
+      categoryId = form.default_category_id
     }
 
     const resolved = resolveStructuralValues(structuralConfig, {
@@ -139,6 +161,10 @@ export async function publicFormRoutes(app: FastifyInstance) {
       cpf: data.cpf,
       category_id: categoryId
     })
+
+    if (!resolved.category_id && form.default_category_id) {
+      resolved.category_id = form.default_category_id
+    }
 
     const cpfValidation = validateCpfWhenEnabled(
       structuralConfig,
@@ -181,7 +207,11 @@ export async function publicFormRoutes(app: FastifyInstance) {
       })
       return {
         participant: formatParticipant(created),
-        redirect_url: form.redirect_url
+        success_behavior: form.success_behavior,
+        success_title: form.success_title,
+        success_message: form.success_message,
+        redirect_url: form.redirect_url,
+        redirect_delay: form.redirect_delay
       }
     } catch (err) {
       if (err instanceof DuplicateParticipantError) {

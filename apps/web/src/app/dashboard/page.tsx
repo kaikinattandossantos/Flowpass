@@ -1,137 +1,151 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { canManageEvents, getHomeRoute, getStoredUser } from '@/store/auth'
+import { API_URL, authHeaders } from '@/lib/api'
+import {
+  DashboardEvent,
+  formatEventDateRange,
+  isUpcomingEvent,
+  sortEventsByStartAsc
+} from '@/lib/events'
+import { getStoredUser } from '@/store/auth'
 
-interface Event {
-  id: string
-  name: string
-  status: 'draft' | 'active' | 'finished'
-  start_at: string
-  end_at: string
+interface ParticipantRow {
+  status: string
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
-
-export default function DashboardPage() {
-  const router = useRouter()
-  const [events, setEvents] = useState<Event[]>([])
+export default function DashboardOverviewPage() {
+  const [events, setEvents] = useState<DashboardEvent[]>([])
+  const [participantTotal, setParticipantTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [canCreate, setCanCreate] = useState(false)
 
   useEffect(() => {
-    const fetchEvents = async () => {
+    void (async () => {
       try {
-        const token = localStorage.getItem('token')
+        const response = await axios.get(`${API_URL}/events`, { headers: authHeaders() })
+        const nextEvents = response.data as DashboardEvent[]
+        setEvents(nextEvents)
+
+        if (nextEvents.length === 0) {
+          setParticipantTotal(0)
+          return
+        }
+
         const user = getStoredUser()
+        const canReadParticipants = user?.role === 'admin' || user?.role === 'viewer'
 
-        if (!token || !user) {
-          router.push('/login')
+        if (!canReadParticipants) {
+          setParticipantTotal(null)
           return
         }
 
-        if (user.role === 'super_admin') {
-          router.push(getHomeRoute(user.role))
-          return
-        }
+        const participantResponses = await Promise.all(
+          nextEvents.map((event) =>
+            axios
+              .get(`${API_URL}/events/${event.id}/participants`, { headers: authHeaders() })
+              .then((res) => res.data as ParticipantRow[])
+              .catch(() => [])
+          )
+        )
 
-        setCanCreate(canManageEvents(user.role))
-
-        const response = await axios.get(`${API_URL}/events`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        setEvents(response.data)
-      } catch (error) {
-        toast.error('Erro ao carregar eventos')
-        console.error(error)
+        const total = participantResponses.reduce(
+          (sum, participants) => sum + participants.filter((item) => item.status !== 'cancelled').length,
+          0
+        )
+        setParticipantTotal(total)
+      } catch {
+        toast.error('Erro ao carregar visão geral')
       } finally {
         setLoading(false)
       }
-    }
+    })()
+  }, [])
 
-    fetchEvents()
-  }, [router])
+  const stats = useMemo(() => {
+    const now = new Date()
+    const activeEvents = events.filter((event) => event.status === 'active').length
+    const upcomingEvents = events.filter((event) => isUpcomingEvent(event, now))
 
-  const getStatusBadge = (status: string) => {
-    const colors = {
-      draft: 'bg-gray-100 text-gray-800',
-      active: 'bg-green-100 text-green-800',
-      finished: 'bg-red-100 text-red-800'
+    return {
+      totalEvents: events.length,
+      activeEvents,
+      upcomingCount: upcomingEvents.length,
+      upcomingList: sortEventsByStartAsc(upcomingEvents).slice(0, 5)
     }
-    return colors[status as keyof typeof colors] || colors.draft
+  }, [events])
+
+  if (loading) {
+    return <p className="text-gray-600">Carregando visão geral...</p>
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-[#0B1F3A] text-white p-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold">FlowPass</h1>
-          <button
-            onClick={() => {
-              localStorage.removeItem('token')
-              router.push('/login')
-            }}
-            className="bg-[#00C896] hover:bg-[#00a876] px-4 py-2 rounded"
-          >
-            Sair
-          </button>
-        </div>
-      </nav>
+    <div className="mx-auto max-w-7xl space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold text-[#0B1F3A]">Visão geral</h1>
+        <p className="mt-2 text-gray-600">Resumo da operação da sua empresa no FlowPass.</p>
+      </div>
 
-      <main className="max-w-7xl mx-auto p-8">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold text-[#0B1F3A]">Meus Eventos</h2>
-          {canCreate && (
-            <button
-              onClick={() => router.push('/dashboard/events/new')}
-              className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg font-semibold"
-            >
-              + Novo Evento
-            </button>
-          )}
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Total de eventos" value={stats.totalEvents} />
+        <StatCard label="Eventos ativos" value={stats.activeEvents} />
+        <StatCard
+          label="Total de participantes"
+          value={participantTotal ?? '—'}
+        />
+        <StatCard label="Próximos eventos" value={stats.upcomingCount} />
+      </div>
 
-        {loading ? (
-          <div className="text-center py-12">
-            <p className="text-gray-600">Carregando eventos...</p>
+      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-[#0B1F3A]">Próximos eventos</h2>
+            <p className="mt-1 text-sm text-gray-600">Acesso rápido aos eventos com agenda futura ou em andamento.</p>
           </div>
-        ) : events.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-600 mb-4">Nenhum evento criado ainda</p>
-            {canCreate && (
-              <button
-                onClick={() => router.push('/dashboard/events/new')}
-                className="bg-[#00C896] hover:bg-[#00a876] text-white px-6 py-2 rounded-lg"
-              >
-                Criar Primeiro Evento
-              </button>
-            )}
+          <Link
+            href="/dashboard/events"
+            className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-[#0B1F3A] transition hover:border-[#00C896] hover:text-[#00C896]"
+          >
+            Ver todos
+          </Link>
+        </div>
+
+        {stats.upcomingList.length === 0 ? (
+          <div className="rounded-lg bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
+            Nenhum evento próximo encontrado.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.map((event) => (
-              <div
+          <div className="space-y-3">
+            {stats.upcomingList.map((event) => (
+              <Link
                 key={event.id}
-                className="bg-white rounded-lg shadow hover:shadow-lg transition cursor-pointer p-6"
-                onClick={() => router.push(`/dashboard/events/${event.id}`)}
+                href={`/dashboard/events/${event.id}`}
+                className="flex flex-col gap-3 rounded-lg border border-gray-100 px-4 py-4 transition hover:border-[#00C896]/30 hover:bg-green-50/40 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-lg font-semibold text-[#0B1F3A]">{event.name}</h3>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadge(event.status)}`}>
-                    {event.status === 'draft' ? 'Rascunho' : event.status === 'active' ? 'Ativo' : 'Finalizado'}
-                  </span>
+                <div>
+                  <p className="font-semibold text-[#0B1F3A]">{event.name}</p>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {formatEventDateRange(event.start_at, event.end_at)}
+                    {event.location ? ` · ${event.location}` : ''}
+                  </p>
                 </div>
-                <p className="text-sm text-gray-600">
-                  {new Date(event.start_at).toLocaleDateString('pt-BR')}
-                </p>
-              </div>
+                <span className="text-sm font-medium text-[#00C896]">Acessar →</span>
+              </Link>
             ))}
           </div>
         )}
-      </main>
+      </section>
+    </div>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p className="text-sm text-gray-600">{label}</p>
+      <p className="mt-3 text-3xl font-bold text-[#0B1F3A]">{value}</p>
     </div>
   )
 }

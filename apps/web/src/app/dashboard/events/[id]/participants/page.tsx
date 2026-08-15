@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
@@ -18,6 +19,7 @@ import { canManageEvents, getStoredUser } from '@/store/auth'
 import { ParticipantFormModalKeyed, ParticipantFormValues } from '@/components/participants/ParticipantFormModal'
 import { ImportModal } from '@/components/participants/ImportModal'
 import { ViewParticipantModal } from '@/components/participants/ViewParticipantModal'
+import { EventBreadcrumb } from '@/components/dashboard/EventBreadcrumb'
 
 interface Participant {
   id: string
@@ -170,14 +172,18 @@ export default function ParticipantsPage() {
   const hasFilters = Boolean(search.trim() || statusFilter)
   const showEmptyState = participants.length === 0 && !hasFilters
 
-  if (loading) return <div className="p-8">Carregando...</div>
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-7xl">
+        <EventBreadcrumb />
+        <p className="text-gray-600">Carregando...</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        <button onClick={() => router.push(`/dashboard/events/${eventId}`)} className="text-[#00C896] mb-4">
-          ← Voltar ao evento
-        </button>
+    <div className="mx-auto max-w-7xl">
+      <EventBreadcrumb />
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
@@ -186,12 +192,6 @@ export default function ParticipantsPage() {
           </div>
           {canEdit && (
             <div className="flex gap-2">
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/forms`)}
-                className="bg-[#00C896] text-white px-4 py-2 rounded-lg text-sm"
-              >
-                Formulários
-              </button>
               <button
                 onClick={() => setImportOpen(true)}
                 className="border border-[#00C896] text-[#00C896] px-4 py-2 rounded-lg text-sm"
@@ -234,12 +234,12 @@ export default function ParticipantsPage() {
             </p>
             {canEdit && (
               <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                <button
-                  onClick={() => router.push(`/dashboard/events/${eventId}/forms`)}
-                  className="bg-[#00C896] text-white px-4 py-2 rounded-lg text-sm"
+                <Link
+                  href={`/dashboard/events/${eventId}/forms`}
+                  className="bg-[#00C896] text-white px-4 py-2 rounded-lg text-sm inline-block text-center"
                 >
                   Formulários
-                </button>
+                </Link>
                 <button
                   onClick={() => setImportOpen(true)}
                   className="border border-[#00C896] text-[#00C896] px-4 py-2 rounded-lg text-sm"
@@ -324,7 +324,6 @@ export default function ParticipantsPage() {
           </table>
         </div>
         )}
-      </div>
 
       <ParticipantFormModalKeyed
         open={formOpen}

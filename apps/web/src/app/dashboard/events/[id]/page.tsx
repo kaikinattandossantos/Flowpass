@@ -1,9 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { API_URL, authHeaders } from '@/lib/api'
+import { EventBreadcrumb } from '@/components/dashboard/EventBreadcrumb'
+import { eventNavHref } from '@/lib/event-navigation'
 
 interface Event {
   id: string
@@ -12,14 +16,6 @@ interface Event {
   start_at: string
   location: string
   registrations: Registration[]
-  operators: Operator[]
-}
-
-interface Operator {
-  id: string
-  name: string
-  email: string
-  active: boolean
 }
 
 interface Registration {
@@ -32,34 +28,18 @@ interface Registration {
   }
 }
 
-interface CreatedOperator extends Operator {
-  temp_password: string
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
-
 export default function EventDetailsPage() {
   const params = useParams()
-  const router = useRouter()
   const eventId = params.id as string
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
-  const [operators, setOperators] = useState<Operator[]>([])
-  const [showOperatorModal, setShowOperatorModal] = useState(false)
-  const [newOperator, setNewOperator] = useState({ name: '', email: '' })
-  const [createdOperator, setCreatedOperator] = useState<CreatedOperator | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     const fetchEvent = async () => {
       try {
-        const token = localStorage.getItem('token')
-        const [eventRes, opsRes] = await Promise.all([
-          axios.get(`${API_URL}/events/${eventId}`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${API_URL}/events/${eventId}/operators`, { headers: { Authorization: `Bearer ${token}` } })
-        ])
+        const eventRes = await axios.get(`${API_URL}/events/${eventId}`, { headers: authHeaders() })
         setEvent(eventRes.data)
-        setOperators(opsRes.data)
       } catch {
         toast.error('Erro ao carregar evento')
       } finally {
@@ -68,22 +48,6 @@ export default function EventDetailsPage() {
     }
     fetchEvent()
   }, [eventId])
-
-  const handleCreateOperator = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const token = localStorage.getItem('token')
-      const res = await axios.post(`${API_URL}/events/${eventId}/operators`, newOperator, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      setCreatedOperator(res.data)
-      setOperators([...operators, res.data])
-      setNewOperator({ name: '', email: '' })
-      toast.success('Operador criado com sucesso!')
-    } catch {
-      toast.error('Erro ao criar operador')
-    }
-  }
 
   const copyInscriptionLink = () => {
     const link = `${window.location.origin}/inscrever/${eventId}`
@@ -100,76 +64,42 @@ export default function EventDetailsPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-          <div className="flex justify-between items-start mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-[#0B1F3A]">{event.name}</h1>
-              <div className="flex items-center gap-4 mt-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  event.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {event.status === 'active' ? 'Ativo' : 'Rascunho'}
-                </span>
-                <span className="text-gray-600">{new Date(event.start_at).toLocaleDateString('pt-BR')}</span>
-                <span className="text-gray-600">{event.location}</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/live`)}
-                className="px-4 py-2 bg-[#00C896] text-white rounded-lg hover:bg-[#00a876]"
-              >
-                Ver ao Vivo
-              </button>
-              <button
-                onClick={copyInscriptionLink}
-                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50"
-              >
-                Copiar Link
-              </button>
+    <div className="mx-auto max-w-6xl">
+      <EventBreadcrumb />
+
+      <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm mb-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-[#0B1F3A]">{event.name}</h1>
+            <div className="flex flex-wrap items-center gap-4 mt-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                event.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+              }`}>
+                {event.status === 'active' ? 'Ativo' : 'Rascunho'}
+              </span>
+              <span className="text-gray-600">{new Date(event.start_at).toLocaleDateString('pt-BR')}</span>
+              <span className="text-gray-600">{event.location}</span>
             </div>
           </div>
-
-          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-            <h2 className="text-lg font-bold text-[#0B1F3A] mb-4">Configuração do evento</h2>
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/participants`)}
-                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
-              >
-                Participantes
-              </button>
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/forms`)}
-                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
-              >
-                Formulários
-              </button>
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/categories`)}
-                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
-              >
-                Categorias
-              </button>
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/registration-links`)}
-                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
-              >
-                Links de inscrição
-              </button>
-              <button
-                onClick={() => router.push(`/dashboard/events/${eventId}/access-points`)}
-                className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50 text-sm"
-              >
-                Pontos de acesso
-              </button>
-            </div>
+          <div className="flex gap-2">
+            <Link
+              href={`/dashboard/events/${eventId}/live`}
+              className="px-4 py-2 bg-[#00C896] text-white rounded-lg hover:bg-[#00a876]"
+            >
+              Ver ao Vivo
+            </Link>
+            <button
+              type="button"
+              onClick={copyInscriptionLink}
+              className="px-4 py-2 border border-[#00C896] text-[#00C896] rounded-lg hover:bg-green-50"
+            >
+              Copiar Link
+            </button>
           </div>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
               <h2 className="text-2xl font-bold text-[#0B1F3A] mb-4">Inscritos ({event.registrations.length})</h2>
@@ -217,99 +147,19 @@ export default function EventDetailsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <h2 className="text-2xl font-bold text-[#0B1F3A] mb-4">Operadores ({operators.length})</h2>
-            
-            <div className="space-y-2 mb-4">
-              {operators.map(op => (
-                <div key={op.id} className="p-3 bg-gray-50 rounded-lg">
-                  <p className="font-semibold text-gray-800">{op.name}</p>
-                  <p className="text-xs text-gray-600">{op.email}</p>
-                  <span className={`inline-block mt-1 px-2 py-1 text-xs rounded ${
-                    op.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {op.active ? 'Ativo' : 'Revogado'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowOperatorModal(true)}
-              className="w-full py-2 bg-[#00C896] text-white rounded-lg hover:bg-[#00a876] font-semibold"
+          <div className="rounded-lg bg-white p-8 shadow-lg">
+            <h2 className="mb-2 text-2xl font-bold text-[#0B1F3A]">Credenciamento</h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Configure operadores e, em breve, links para check-in presencial com QR Code.
+            </p>
+            <Link
+              href={eventNavHref(eventId, 'credenciamento')}
+              className="inline-block rounded-lg bg-[#00C896] px-4 py-2 text-sm font-semibold text-white hover:bg-[#00a876]"
             >
-              + Criar Operador
-            </button>
-
-            {showOperatorModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-lg p-8 max-w-md w-full">
-                  <h3 className="text-xl font-bold text-[#0B1F3A] mb-4">Criar Novo Operador</h3>
-                  
-                  {createdOperator ? (
-                    <div className="space-y-4">
-                      <p className="text-green-600 font-semibold">Operador criado com sucesso!</p>
-                      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                        <p><strong>Nome:</strong> {createdOperator.name}</p>
-                        <p><strong>E-mail:</strong> {createdOperator.email}</p>
-                        <p><strong>Senha Temporária:</strong> <code className="bg-gray-200 px-2 py-1 rounded">{createdOperator.temp_password}</code></p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setShowOperatorModal(false)
-                          setCreatedOperator(null)
-                          setNewOperator({ name: '', email: '' })
-                        }}
-                        className="w-full py-2 bg-[#00C896] text-white rounded-lg"
-                      >
-                        Fechar
-                      </button>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleCreateOperator} className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-                        <input
-                          type="text"
-                          required
-                          value={newOperator.name}
-                          onChange={(e) => setNewOperator({...newOperator, name: e.target.value})}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-                        <input
-                          type="email"
-                          required
-                          value={newOperator.email}
-                          onChange={(e) => setNewOperator({...newOperator, email: e.target.value})}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00C896] outline-none"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowOperatorModal(false)}
-                          className="flex-1 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="submit"
-                          className="flex-1 py-2 bg-[#00C896] text-white rounded-lg hover:bg-[#00a876]"
-                        >
-                          Criar
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </div>
-            )}
+              Abrir credenciamento
+            </Link>
           </div>
         </div>
-      </div>
     </div>
   )
 }

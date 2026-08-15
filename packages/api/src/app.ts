@@ -3,6 +3,7 @@ import fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import websocket from '@fastify/websocket'
+import multipart from '@fastify/multipart'
 import { serializerCompiler, validatorCompiler, ZodTypeProvider } from 'fastify-type-provider-zod'
 import { Server } from 'socket.io'
 import http from 'http'
@@ -18,6 +19,8 @@ import { formFieldRoutes } from './routes/form-fields'
 import { participantRoutes } from './routes/participants'
 import { registrationFormRoutes } from './routes/registration-forms'
 import { publicFormRoutes } from './routes/public-forms'
+import { publicCredentialingRoutes } from './routes/public-credentialing'
+import { formAssetRoutes } from './routes/form-assets'
 
 export async function buildApp() {
   const app = fastify().withTypeProvider<ZodTypeProvider>()
@@ -25,16 +28,28 @@ export async function buildApp() {
   app.setValidatorCompiler(validatorCompiler)
   app.setSerializerCompiler(serializerCompiler)
 
-  app.register(cors, { origin: '*' })
+  app.register(cors, {
+    origin: '*',
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  })
   app.register(jwt, {
     secret: process.env.JWT_SECRET || 'flowpass-secret-key-change-me'
   })
   app.register(websocket)
 
+  app.register(multipart, {
+    limits: {
+      fileSize: 5 * 1024 * 1024,
+      files: 1
+    }
+  })
+
   app.register(eventSetupRoutes)
   app.register(registrationFormRoutes)
   app.register(formFieldRoutes)
   app.register(publicFormRoutes)
+  app.register(publicCredentialingRoutes)
+  app.register(formAssetRoutes)
   app.register(participantRoutes)
   app.register(adminRoutes)
   app.register(authRoutes)

@@ -6,6 +6,8 @@ import axios from 'axios'
 import { io } from 'socket.io-client'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
+import { API_URL, authHeaders } from '@/lib/api'
+import { EventBreadcrumb } from '@/components/dashboard/EventBreadcrumb'
 
 interface Stats {
   total_registered: number
@@ -21,8 +23,6 @@ interface CheckinEvent {
   operator_name: string
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
-
 export default function LivePage() {
   const params = useParams()
   const eventId = params.id as string
@@ -34,11 +34,10 @@ export default function LivePage() {
     const token = localStorage.getItem('token')
     if (!token) return
 
-    // Fetch initial stats
     const fetchStats = async () => {
       try {
         const response = await axios.get(`${API_URL}/events/${eventId}/stats`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: authHeaders()
         })
         setStats(response.data)
       } catch {
@@ -67,11 +66,17 @@ export default function LivePage() {
   }, [eventId])
 
   if (loading) {
-    return <div className="p-8">Carregando...</div>
+    return (
+      <div className="mx-auto max-w-6xl">
+        <EventBreadcrumb />
+        <p className="text-gray-600">Carregando...</p>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="mx-auto max-w-6xl">
+      <EventBreadcrumb />
       <h1 className="text-3xl font-bold text-[#0B1F3A] mb-8">Acompanhamento em Tempo Real</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

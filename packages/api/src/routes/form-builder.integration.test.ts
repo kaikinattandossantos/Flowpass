@@ -439,6 +439,95 @@ describe('form builder integration', { skip: !dbReady }, () => {
     assert.equal(res.statusCode, 404)
   })
 
+  it('saves builder payload transactionally', async () => {
+    const fieldsRes = await app.inject({
+      method: 'GET',
+      url: `/events/${eventId}/registration-forms/${formAId}/form-fields`,
+      headers: { authorization: `Bearer ${adminToken}` }
+    })
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/events/${eventId}/registration-forms/${formAId}/builder`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        name: 'Participantes Builder',
+        slug: 'participantes-builder-test',
+        structural_config: {
+          name: { enabled: true, required: true },
+          email: { enabled: false, required: false },
+          phone: { enabled: false, required: false },
+          cpf: { enabled: true, required: true, label: 'Documento' },
+          category: { enabled: false, required: false }
+        },
+        field_layout: [
+          { kind: 'structural', key: 'name' },
+          { kind: 'custom', field_id: customFieldId },
+          { kind: 'structural', key: 'cpf' }
+        ],
+        registration_limit: 50,
+        redirect_url: null,
+        default_category_id: categoryId,
+        public_title: 'Inscrições Builder',
+        public_description: 'Preencha seus dados.',
+        success_message: 'Inscrição realizada com sucesso!',
+        submit_button_text: 'Finalizar inscrição',
+        appearance: {
+          primary_color: '#00C896',
+          button_color: '#00C896',
+          background_color: '#F8FAFC',
+          text_color: '#0B1F3A'
+        },
+        fields: fieldsRes.json().map((field: { id: string; label: string; type: string; required: boolean; enabled?: boolean; placeholder?: string | null; options?: string[] | null }) => ({
+          id: field.id,
+          label: field.label,
+          type: field.type,
+          required: field.required,
+          enabled: field.enabled !== false,
+          placeholder: field.placeholder,
+          options: field.options ?? undefined
+        })),
+        deleted_field_ids: []
+      }
+    })
+
+    assert.equal(res.statusCode, 200)
+    assert.equal(res.json().slug, 'participantes-builder-test')
+    assert.equal(res.json().public_title, 'Inscrições Builder')
+    assert.equal(res.json().registration_limit, 50)
+
+    const bySlug = await app.inject({ method: 'GET', url: '/public/forms/participantes-builder-test' })
+    assert.equal(bySlug.statusCode, 200)
+    assert.equal(bySlug.json().form.public_title, 'Inscrições Builder')
+
+    const byPublicId = await app.inject({ method: 'GET', url: `/public/forms/${publicAId}` })
+    assert.equal(byPublicId.statusCode, 200)
+  })
+
+  it('rejects duplicate slug', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/events/${eventId}/registration-forms/${formBId}/builder`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        name: 'Participantes B',
+        slug: 'participantes-builder-test',
+        structural_config: {
+          name: { enabled: true, required: true },
+          email: { enabled: false, required: false },
+          phone: { enabled: false, required: false },
+          cpf: { enabled: true, required: true },
+          category: { enabled: false, required: false }
+        },
+        field_layout: [{ kind: 'structural', key: 'name' }, { kind: 'structural', key: 'cpf' }],
+        fields: [],
+        deleted_field_ids: []
+      }
+    })
+    assert.equal(res.statusCode, 409)
+    assert.match(res.json().message, /já está em uso/i)
+  })
+
   it('existing default form remains active after migration semantics', async () => {
     assert.equal((await prisma.registrationForm.findUnique({ where: { id: companyBFormId } }))!.status, 'active')
   })

@@ -248,7 +248,7 @@ export default function NewEventPage() {
             ) : (
               <>
                 <button
-                  onClick={() => router.push('/dashboard')}
+                  onClick={() => router.push('/dashboard/events')}
                   className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
                 >
                   Salvar como Rascunho

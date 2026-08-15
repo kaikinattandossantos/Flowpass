@@ -1,10 +1,12 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { canManageEvents, getStoredUser } from '@/store/auth'
+import { EventBreadcrumb } from '@/components/dashboard/EventBreadcrumb'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333'
 
@@ -101,14 +103,26 @@ export default function EventRegistrationLinksPage() {
     }
   }
 
-  if (loading) return <div className="p-8">Carregando...</div>
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-3xl">
+        <EventBreadcrumb />
+        <p className="text-gray-600">Carregando...</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-3xl mx-auto">
-        <button onClick={() => router.push(`/dashboard/events/${eventId}`)} className="text-[#00C896] mb-4">
-          ← Voltar ao evento
-        </button>
+    <div className="mx-auto max-w-3xl">
+      <EventBreadcrumb />
+      <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        Esta área foi descontinuada na navegação. Use{' '}
+        <Link href={`/dashboard/events/${eventId}/forms`} className="font-semibold underline">
+          Formulários
+        </Link>{' '}
+        — cada formulário já possui link público próprio em <code>/f/{'{publicId}'}</code>.
+        Os dados existentes foram preservados.
+      </div>
         <h1 className="text-2xl font-bold text-[#0B1F3A] mb-2">Links de inscrição</h1>
         <p className="text-gray-600 mb-6 text-sm">Cada link gera uma URL própria de inscrição</p>
 
@@ -168,7 +182,6 @@ export default function EventRegistrationLinksPage() {
             ))
           )}
         </div>
-      </div>
     </div>
   )
 }
